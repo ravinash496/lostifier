@@ -94,6 +94,7 @@ scratch
 
 # Visual Studio
 .vs/
+*.pyproj.user
 
 # PyCharm
 **/.idea/workspace.xml
