@@ -5,10 +5,10 @@
 .. currentmodule:: bulkload
 .. moduleauthor:: Vishnu Reddy, Darell Stoick
 
-Reads data from a .GDB and imports it into a Postgres DB for the ECRF/LVF. 
-Two modes 
-F -Full - Overwrites and current values and imports the full .gdb 
-C - Change only - Reads an Add and Delete table for each layer, and processes each entry accordingly(Add/Update/Delete)  
+Reads data from a .GDB and imports it into a Postgres DB for the ECRF/LVF.
+Two modes
+F -Full - Overwrites and current values and imports the full .gdb
+C - Change only - Reads an Add and Delete table for each layer, and processes each entry accordingly(Add/Update/Delete)
 """
 import psycopg2 as psycopg2
 from osgeo import ogr
