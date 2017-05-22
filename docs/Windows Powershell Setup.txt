@@ -1,0 +1,31 @@
+1)Download and install python 3.6.1 (Windows) from https://www.python.org/ftp/python/3.6.1/python-3.6.1-amd64.exe
+
+2)Download the python wheel file for GDAL
+	a.Go to http://www.lfd.uci.edu/~gohlke/pythonlibs/#gdal
+	b.Locate the link for GDAL-2.1.3-cp36-cp36m-win_amd64.whl and click on it.
+	c.Note the location of the download for later.
+	
+3) Download the python wheel file for Psycopg
+	a.Go to http://www.lfd.uci.edu/~gohlke/pythonlibs/#Psycopg
+	b.Locate the link for psycopg2-2.7.1-cp36-cp36m-win_amd64.whl and click on it.
+	c.Note the location of the download for later.
+
+
+
+6)Open up a PowerShell terminal (*as an admin) and create a directory in which to build/run the script, set up a python virtual environment and activate it.
+	md bulkload
+	cd bulkload
+	virtualenv --python c:\Users\<your user>\AppData\Local\Programs\Python\Python36\python.exe myenv
+	.\myenv\Scripts\activate
+		-If you get an error about UnauthorizedAccess - Reverify you are running powershell as an Administrator and run the following command : Set-ExecutionPolicy Unrestricted
+		- Say Yes on the confirmation and re-try the .\myenv\Scripts\activate command
+	pip install c:\Users\<your user>\Downloads\GDAL-2.1.3-cp36-cp36m-win_amd64.whl
+	pip install c:\Users\<your user>\Downloads\psycopg2-2.7.1-cp36-cp36m-win_amd64.whl
+
+7)Save the attached bulkload.py file in the project directory created in step 3, open it in the editor of your choice and hack away.
+
+8)To run the script from the command line:
+
+python bulkload.py
+
+
