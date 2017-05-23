@@ -2,7 +2,7 @@
 Bulkload, setup tools and utilities for Spatial Router.
 
 ### General code workflow - first time working on a project.
-1. Clone the repo locally
+1. Clone the repo locally.
 
 `git clone https://github.com/Geo-Comm/lostifier.git`  
 
