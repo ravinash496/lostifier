@@ -5,10 +5,10 @@
 .. currentmodule:: bulkload
 .. moduleauthor:: Vishnu Reddy, Darell Stoick
 
-Reads data from a .GDB and imports it into a Postgres DB for the ECRF/LVF.
-Two modes
-F -Full - Overwrites and current values and imports the full .gdb
-C - Change only - Reads an Add and Delete table for each layer, and processes each entry accordingly(Add/Update/Delete)
+Reads data from a .GDB and imports it into a Postgres DB for the ECRF/LVF. 
+Two modes 
+F -Full - Overwrites and current values and imports the full .gdb 
+C - Change only - Reads an Add and Delete table for each layer, and processes each entry accordingly(Add/Update/Delete)  
 """
 import psycopg2 as psycopg2
 from osgeo import ogr
@@ -242,15 +242,33 @@ def fullGDBImport():
             __layersList_Processed.append(tablename)
 
 
-# ogrds.ExecuteSQL("") would not run the setval command so we created a new connection
-# with psycopg2 to run the SQL statement
+    createSequence(servername,database,port,usr,pw)
+    createIndex(servername,database,port,usr,pw)
+
+
+# End of fullGDBImport()
+
+
+def createSequence(servername,database,port,usr,pw):
+    """
+    Update sequence values for the tables in postgres.
+    :param servername: 
+    :param database: 
+    :param port: 
+    :param usr: 
+    :param pw: 
+    :return: 
+    """
+    # ogrds.ExecuteSQL("") would not run the setval command so we created a new connection
+    # with psycopg2 to run the SQL statement
     try:
         con = connectpostgresdb(servername, database, port, usr, pw)
         con.autocommit = True
         cursor = con.cursor()
 
         for processedlayer in __layersList_Processed:
-            sqlstring = "SELECT setval(pg_get_serial_sequence('%s', 'ogc_fid'), max(ogc_fid)) FROM %s;" % (processedlayer, processedlayer)
+            sqlstring = "SELECT setval(pg_get_serial_sequence('%s', 'ogc_fid'), max(ogc_fid)) FROM %s;" % (
+            processedlayer, processedlayer)
             cursor.execute(sqlstring)
             print("Postgres primary key sequence has been reset for the table %s" % (processedlayer))
 
@@ -259,9 +277,33 @@ def fullGDBImport():
     finally:
         con.close()
 
+# End of createSequence
 
-# End of fullGDBImport()
+def createIndex(servername,database,port,usr,pw):
+    """
+    Apply Index to specific fields in postgres tables
+    :param servername: 
+    :param database: 
+    :param port: 
+    :param usr: 
+    :param pw: 
+    :return: 
+    """
+    try:
+        con = connectpostgresdb(servername, database, port, usr, pw)
+        con.autocommit = True
+        cursor = con.cursor()
 
+        sqlstring = getIndexString()
+        cursor.execute(sqlstring)
+        print("Index's have been applied.")
+
+    except psycopg2.Error as e:
+        print(e.pgerror)
+    finally:
+        con.close()
+
+# End of createIndex
 
 # ***********************************
 # Start of the Script
@@ -295,3 +337,246 @@ try:
 except NameError:
     print('An error was encountered and the process has been terminated.')
     raise
+
+
+
+def getIndexString():
+    """
+    Creates a string containting the full SQL command for all of the index's
+    :return: string
+    """
+
+    value = """-- Index: srgis.public.ssap_srcfulladr_idx
+-- DROP INDEX srgis.public.ssap_srcfulladr_idx;
+CREATE INDEX ssap_srcfulladr_idx
+  ON srgis.public.ssap
+  USING btree
+  (btrim(upper(srcfulladr::text)));
+
+-- Index: srgis.public.ssap_addnum_idx
+-- DROP INDEX srgis.public.ssap_addnum_idx;
+CREATE INDEX ssap_addnum_idx
+  ON srgis.public.ssap
+  USING btree
+  (btrim(upper(addnum::text)));
+
+-- Index: srgis.public.ssap_country_idx
+-- DROP INDEX srgis.public.ssap_country_idx;
+CREATE INDEX ssap_country_idx
+  ON srgis.public.ssap
+  USING btree
+  (btrim(upper(country::text)));
+
+-- Index: srgis.public.ssap_county_idx
+-- DROP INDEX srgis.public.ssap_county_idx;
+CREATE INDEX ssap_county_idx
+  ON srgis.public.ssap
+  USING btree
+  (btrim(upper(county::text)));
+
+-- Index: srgis.public.ssap_msagcomm_idx
+-- DROP INDEX srgis.public.ssap_msagcomm_idx;
+CREATE INDEX ssap_msagcomm_idx
+  ON srgis.public.ssap
+  USING btree
+  (btrim(upper(msagcomm::text)));
+
+-- Index: srgis.public.ssap_postcomm_idx
+-- DROP INDEX srgis.public.ssap_postcomm_idx_idx;
+CREATE INDEX ssap_postcomm_idx
+  ON srgis.public.ssap
+  USING btree
+  (btrim(upper(postcomm::text)));
+
+-- Index: srgis.public.ssap_postdir_idx
+-- DROP INDEX srgis.public.ssap_postdir_idx;
+CREATE INDEX ssap_postdir_idx
+  ON srgis.public.ssap
+  USING btree
+  (btrim(upper(postdir::text)));
+
+-- Index: srgis.public.ssap_predir_idx
+-- DROP INDEX srgis.public.ssap_predir_idx;
+CREATE INDEX ssap_predir_idx
+  ON srgis.public.ssap
+  USING btree
+  (btrim(upper(predir::text)));
+
+-- Index: srgis.public.ssap_state_idx
+-- DROP INDEX srgis.public.ssap_state_idx;
+CREATE INDEX ssap_state_idx
+  ON srgis.public.ssap
+  USING btree
+  (btrim(upper(state::text)));
+
+-- Index: srgis.public.ssap_strname_idx
+-- DROP INDEX srgis.public.ssap_strname_idx;
+CREATE INDEX ssap_strname_idx
+  ON srgis.public.ssap
+  USING btree
+  (btrim(upper(strname::text)));
+
+-- Index: srgis.public.ssap_posttype_idx
+-- DROP INDEX srgis.public.ssap_posttype_idx;
+CREATE INDEX ssap_posttype_idx
+  ON srgis.public.ssap
+  USING btree
+  (btrim(upper(posttype::text)));
+
+-- Index: srgis.public.ssap_zipcode_idx
+-- DROP INDEX srgis.public.ssap_zipcode_idx;
+CREATE INDEX ssap_zipcode_idx
+  ON srgis.public.ssap
+  USING btree
+  (btrim(upper(zipcode::text)));
+
+-- Index: srgis.public.roadcenterline_srcfullnam_idx
+-- DROP INDEX srgis.public.roadcenterline_srcfullnam_idx;
+CREATE INDEX roadcenterline_srcfullnam_idx
+  ON srgis.public.roadcenterline
+  USING btree
+  (btrim(upper(srcfullnam::text)));
+
+-- Index: srgis.public.roadcenterline_fromaddl_idx
+-- DROP INDEX srgis.public.roadcenterline_fromaddl_idx;
+CREATE INDEX roadcenterline_fromaddl_idx
+  ON srgis.public.roadcenterline
+  USING btree
+  (btrim(upper(fromaddl::text)));
+
+-- Index: srgis.public.roadcenterline_toaddl_idx
+-- DROP INDEX srgis.public.roadcenterline_toaddl_idx;
+CREATE INDEX roadcenterline_toaddl_idx
+  ON srgis.public.roadcenterline
+  USING btree
+  (btrim(upper(toaddl::text)));
+
+-- Index: srgis.public.roadcenterline_countryl_idx
+-- DROP INDEX srgis.public.roadcenterline_countryl_idx;
+CREATE INDEX roadcenterline_countryl_idx
+  ON srgis.public.roadcenterline
+  USING btree
+  (btrim(upper(countryl::text)));
+
+-- Index: srgis.public.roadcenterline_countyl_idx
+-- DROP INDEX srgis.public.roadcenterline_countyl_idx;
+CREATE INDEX roadcenterline_countyl_idx
+  ON srgis.public.roadcenterline
+  USING btree
+  (btrim(upper(countyl::text)));
+
+-- Index: srgis.public.roadcenterline_msagcomml_idx
+-- DROP INDEX srgis.public.roadcenterline_msagcomml_idx;
+CREATE INDEX roadcenterline_msagcomml_idx
+  ON srgis.public.roadcenterline
+  USING btree
+  (btrim(upper(msagcomml::text)));
+
+-- Index: srgis.public.roadcenterline_postcomml_idx
+-- DROP INDEX srgis.public.roadcenterline_postcomml_idx;
+CREATE INDEX roadcenterline_postcomml_idx
+  ON srgis.public.roadcenterline
+  USING btree
+  (btrim(upper(postcomml::text)));
+
+-- Index: srgis.public.roadcenterline_statel_idx
+-- DROP INDEX srgis.public.roadcenterline_statel_idx;
+CREATE INDEX roadcenterline_statel_idx
+  ON srgis.public.roadcenterline
+  USING btree
+  (btrim(upper(statel::text)));
+
+-- Index: srgis.public.roadcenterline_zipcodel_idx
+-- DROP INDEX srgis.public.roadcenterline_zipcodel_idx;
+CREATE INDEX roadcenterline_zipcodel_idx
+  ON srgis.public.roadcenterline
+  USING btree
+  (btrim(upper(zipcodel::text)));
+
+-- Index: srgis.public.roadcenterline_postdir_idx
+-- DROP INDEX srgis.public.roadcenterline_postdir_idx;
+CREATE INDEX roadcenterline_postdir_idx
+  ON srgis.public.roadcenterline
+  USING btree
+  (btrim(upper(postdir::text)));
+
+-- Index: srgis.public.roadcenterline_predir_idx
+-- DROP INDEX srgis.public.roadcenterline_predir_idx;
+CREATE INDEX roadcenterline_predir_idx
+  ON srgis.public.roadcenterline
+  USING btree
+  (btrim(upper(predir::text)));
+
+-- Index: srgis.public.roadcenterline_fromaddr_idx
+-- DROP INDEX srgis.public.roadcenterline_fromaddr_idx;
+CREATE INDEX roadcenterline_fromaddr_idx
+  ON srgis.public.roadcenterline
+  USING btree
+  (btrim(upper(fromaddr::text)));
+
+-- Index: srgis.public.roadcenterline_toaddr_idx
+-- DROP INDEX srgis.public.roadcenterline_toaddr_idx;
+CREATE INDEX roadcenterline_toaddr_idx
+  ON srgis.public.roadcenterline
+  USING btree
+  (btrim(upper(toaddr::text)));
+
+-- Index: srgis.public.roadcenterline_countryr_idx
+-- DROP INDEX srgis.public.roadcenterline_countryr_idx;
+CREATE INDEX roadcenterline_countryr_idx
+  ON srgis.public.roadcenterline
+  USING btree
+  (btrim(upper(countryr::text)));
+
+-- Index: srgis.public.roadcenterline_countyr_idx
+-- DROP INDEX srgis.public.roadcenterline_countyr_idx;
+CREATE INDEX roadcenterline_countyr_idx
+  ON srgis.public.roadcenterline
+  USING btree
+  (btrim(upper(countyr::text)));
+
+-- Index: srgis.public.roadcenterline_msagcommr_idx
+-- DROP INDEX srgis.public.roadcenterline_msagcommr_idx;
+CREATE INDEX roadcenterline_msagcommr_idx
+  ON srgis.public.roadcenterline
+  USING btree
+  (btrim(upper(msagcommr::text)));
+
+-- Index: srgis.public.roadcenterline_postcommr_idx
+-- DROP INDEX srgis.public.roadcenterline_postcommr_idx;
+CREATE INDEX roadcenterline_postcommr_idx
+  ON srgis.public.roadcenterline
+  USING btree
+  (btrim(upper(postcommr::text)));
+
+-- Index: srgis.public.roadcenterline_stater_idx
+-- DROP INDEX srgis.public.roadcenterline_stater_idx;
+CREATE INDEX roadcenterline_stater_idx
+  ON srgis.public.roadcenterline
+  USING btree
+  (btrim(upper(stater::text)));
+
+-- Index: srgis.public.roadcenterline_zipcoder_idx
+-- DROP INDEX srgis.public.roadcenterline_zipcoder_idx;
+CREATE INDEX roadcenterline_zipcoder_idx
+  ON srgis.public.roadcenterline
+  USING btree
+  (btrim(upper(zipcoder::text)));
+
+-- Index: srgis.public.roadcenterline_strname_idx
+-- DROP INDEX srgis.public.roadcenterline_strname_idx;
+CREATE INDEX roadcenterline_strname_idx
+  ON srgis.public.roadcenterline
+  USING btree
+  (btrim(upper(strname::text)));
+
+-- Index: srgis.public.roadcenterline_posttype_idx
+-- DROP INDEX srgis.public.roadcenterline_posttype_idx;
+CREATE INDEX roadcenterline_posttype_idx
+  ON srgis.public.roadcenterline
+  USING btree
+  (btrim(upper(posttype::text)));"""
+
+
+
+# End of getIndexString
