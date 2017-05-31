@@ -241,13 +241,45 @@ def fullGDBImport():
             tablename = ogrds.CopyLayer(layer, layername, options).GetName()
             __layersList_Processed.append(tablename)
 
-
+    createPrimaryKey(servername,database,port,usr,pw)
     createSequence(servername,database,port,usr,pw)
     createIndex(servername,database,port,usr,pw)
 
 
 # End of fullGDBImport()
 
+
+def createPrimaryKey(servername, database, port, usr, pw):
+    """
+    Alters each table's primary key to gcunqid field
+    :param servername: 
+    :param database: 
+    :param port: 
+    :param usr: 
+    :param pw: 
+    :return: 
+    """
+
+    try:
+        con = connectpostgresdb(servername, database, port, usr, pw)
+        con.autocommit = True
+        cursor = con.cursor()
+
+        for processedlayer in __layersList_Processed:
+            sqlstring = "ALTER TABLE %s DROP CONSTRAINT %s_pkey;" % (processedlayer,processedlayer)
+            cursor.execute(sqlstring)
+
+            sqlstring = "ALTER TABLE %s ADD PRIMARY KEY (gcunqid)" % (processedlayer)
+            cursor.execute(sqlstring)
+
+            print("Primary key has been set to gcunqid for the table %s" % (processedlayer))
+
+    except psycopg2.Error as e:
+        print(e.pgerror)
+    finally:
+        con.close()
+
+# End of createPrimaryKey()
 
 def createSequence(servername,database,port,usr,pw):
     """
@@ -304,41 +336,6 @@ def createIndex(servername,database,port,usr,pw):
         con.close()
 
 # End of createIndex
-
-# ***********************************
-# Start of the Script
-# ***********************************
-
-# The list of layers we want to load.
-__layers_to_load = ['CountyBoundary', 'UnIncCommBoundary', 'IncMunicipalBoundary', 'StateBoundary', 'RoadCenterline', 'SSAP']
-__layersList_Processed =[]
-
-# Open up the file geodatabase.
-try:
-    driver = ogr.GetDriverByName('OpenFileGDB')
-    response = input("Please enter the complete source path for gdb file:")
-    __ds_gdb = driver.Open(response, 0)
-except Exception as e:
-    print(e)
-
-if __ds_gdb is None:
-    print("Could not load gdb file, please verify path is correct.")
-    quit()
-
-scriptmode = input("Select bulk import mode. Type 'C' for change only or type 'F' for a full gbd import.")
-
-try:
-    if scriptmode.lower() == 'c':
-        changeOnlyGDBImport()
-    elif scriptmode.lower() == 'f':
-        fullGDBImport()
-    else:
-        print("Invalid option detected, goodbye")
-except NameError:
-    print('An error was encountered and the process has been terminated.')
-    raise
-
-
 
 def getIndexString():
     """
@@ -577,6 +574,41 @@ CREATE INDEX roadcenterline_posttype_idx
   USING btree
   (btrim(upper(posttype::text)));"""
 
+    return value
 
 
 # End of getIndexString
+
+
+# ***********************************
+# Start of the Script
+# ***********************************
+
+# The list of layers we want to load.
+__layers_to_load = ['CountyBoundary', 'UnIncCommBoundary', 'IncMunicipalBoundary', 'StateBoundary', 'RoadCenterline', 'SSAP']
+__layersList_Processed =[]
+
+# Open up the file geodatabase.
+try:
+    driver = ogr.GetDriverByName('OpenFileGDB')
+    response = input("Please enter the complete source path for gdb file:")
+    __ds_gdb = driver.Open(response, 0)
+except Exception as e:
+    print(e)
+
+if __ds_gdb is None:
+    print("Could not load gdb file, please verify path is correct.")
+    quit()
+
+scriptmode = input("Select bulk import mode. Type 'C' for change only or type 'F' for a full gbd import.")
+
+try:
+    if scriptmode.lower() == 'c':
+        changeOnlyGDBImport()
+    elif scriptmode.lower() == 'f':
+        fullGDBImport()
+    else:
+        print("Invalid option detected, goodbye")
+except NameError:
+    print('An error was encountered and the process has been terminated.')
+    raise
