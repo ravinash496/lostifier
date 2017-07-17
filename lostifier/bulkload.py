@@ -264,39 +264,6 @@ class BulkLoader(object):
         ogrds.CommitTransaction()
         self._logger.info('All changes have been processed.')
 
-    def _copy_layer(self, source_layer, ogrds):
-        """
-        Creates a copy of the source layer in the destination from scratch.
-
-        :param source_layer: The source layer.
-        :type source_layer: :py:class:`osgeo.ogr.Layer`
-        :param ogrds: The data source for the destination.
-        :type ogrds: :py:class:`osgeo.ogr.DataSource`
-        """
-        ogr
-        sr = source_layer.GetSpatialRef()
-        layer_geom_type = source_layer.GetGeomType()
-        target_layer_name = '{0}.{1}'.format(self._target_schema, source_layer.GetName())
-
-        new_layer = ogrds.CreateLayer(target_layer_name, sr, layer_geom_type, ['OVERWRITE=YES'])
-
-        ogrds.StartTransaction()
-
-        feature = source_layer.GetNextFeature()
-        while feature is not None:
-            gcunqid = feature.GetFieldAsString(feature.GetFieldIndex("gcUnqID"))
-            feature.SetFID(-1)
-
-            self._logger.debug('Attempting to copy feature {0}.'.format(gcunqid))
-            new_layer.CreateFeature(feature)
-            self._logger.debug('Successfully copied feature {0}.'.format(gcunqid))
-
-            feature = source_layer.GetNextFeature()
-
-        ogrds.CommitTransaction()
-
-        return target_layer_name
-
     def full_gdb_import(self):
         """
         Process imports the full GDB overwriting any previous values.
@@ -324,7 +291,6 @@ class BulkLoader(object):
                 layername = layer.GetName()
                 self._logger.info('Importing layer :: {0}'.format(layername))
                 tablename = ogrds.CopyLayer(layer, name, options).GetName()
-                # tablename = self._copy_layer(layer, ogrds)
                 processed_layers.append(tablename)
 
         self._logger.info('Processing layers starting with ESB and ALOC . . .')
@@ -336,7 +302,6 @@ class BulkLoader(object):
             if layername.upper().startswith("ESB") or layername.upper().startswith("ALOC"):
                 self._logger.info('Importing layer :: {0}'.format(layername))
                 tablename = ogrds.CopyLayer(layer, layername, options).GetName()
-                # tablename = self._copy_layer(layer, ogrds)
                 processed_layers.append(tablename)
 
         self._create_primary_key(processed_layers)
@@ -547,14 +512,14 @@ class BulkLoader(object):
         CREATE INDEX roadcenterline_fromaddl_idx
           ON srgis.{0}.roadcenterline
           USING btree
-          (btrim(upper(fromaddl::text)));
+          (btrim(upper(fromaddrl::text)));
         
         -- Index: srgis.{0}.roadcenterline_toaddl_idx
         -- DROP INDEX srgis.{0}.roadcenterline_toaddl_idx;
         CREATE INDEX roadcenterline_toaddl_idx
           ON srgis.{0}.roadcenterline
           USING btree
-          (btrim(upper(toaddl::text)));
+          (btrim(upper(toaddrl::text)));
         
         -- Index: srgis.{0}.roadcenterline_countryl_idx
         -- DROP INDEX srgis.{0}.roadcenterline_countryl_idx;
@@ -617,14 +582,14 @@ class BulkLoader(object):
         CREATE INDEX roadcenterline_fromaddr_idx
           ON srgis.{0}.roadcenterline
           USING btree
-          (btrim(upper(fromaddr::text)));
+          (btrim(upper(fromaddrr::text)));
         
         -- Index: srgis.{0}.roadcenterline_toaddr_idx
         -- DROP INDEX srgis.{0}.roadcenterline_toaddr_idx;
         CREATE INDEX roadcenterline_toaddr_idx
           ON srgis.{0}.roadcenterline
           USING btree
-          (btrim(upper(toaddr::text)));
+          (btrim(upper(toaddrr::text)));
         
         -- Index: srgis.{0}.roadcenterline_countryr_idx
         -- DROP INDEX srgis.{0}.roadcenterline_countryr_idx;
