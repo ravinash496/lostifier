@@ -201,15 +201,6 @@ class BulkLoader(object):
                     "DELETE FROM {0}.{1} where gcunqid = '{2}' ".format(self._target_schema, name, gcunqid), None, ""
                 )
 
-            # Create the new item
-            result = postgreslayer.CreateFeature(feature)
-
-            self._verify_results(result, gcunqid)
-            itemcount = itemcount + 1
-            feature = gdblayer_add.GetNextFeature()
-
-        self._logger.info('{0} items were added into {1}'.format(itemcount, name))
-
     def _process_layer(self, name, gdb, ogrds):
         """
         Process the adds and deletes for the layer.
@@ -238,6 +229,7 @@ class BulkLoader(object):
         Starting Location for the Change Only Process
 
         """
+
         ogrds = self._ogr_open_postgis()
         gdb = self._ogr_open_fgdb()
 
@@ -512,14 +504,14 @@ class BulkLoader(object):
         CREATE INDEX roadcenterline_fromaddl_idx
           ON srgis.{0}.roadcenterline
           USING btree
-          (btrim(upper(fromaddrl::text)));
+          (btrim(upper(fromaddl::text)));
         
         -- Index: srgis.{0}.roadcenterline_toaddl_idx
         -- DROP INDEX srgis.{0}.roadcenterline_toaddl_idx;
         CREATE INDEX roadcenterline_toaddl_idx
           ON srgis.{0}.roadcenterline
           USING btree
-          (btrim(upper(toaddrl::text)));
+          (btrim(upper(toaddl::text)));
         
         -- Index: srgis.{0}.roadcenterline_countryl_idx
         -- DROP INDEX srgis.{0}.roadcenterline_countryl_idx;
@@ -582,14 +574,14 @@ class BulkLoader(object):
         CREATE INDEX roadcenterline_fromaddr_idx
           ON srgis.{0}.roadcenterline
           USING btree
-          (btrim(upper(fromaddrr::text)));
+          (btrim(upper(fromaddr::text)));
         
         -- Index: srgis.{0}.roadcenterline_toaddr_idx
         -- DROP INDEX srgis.{0}.roadcenterline_toaddr_idx;
         CREATE INDEX roadcenterline_toaddr_idx
           ON srgis.{0}.roadcenterline
           USING btree
-          (btrim(upper(toaddrr::text)));
+          (btrim(upper(toaddr::text)));
         
         -- Index: srgis.{0}.roadcenterline_countryr_idx
         -- DROP INDEX srgis.{0}.roadcenterline_countryr_idx;
@@ -648,6 +640,7 @@ class BulkLoader(object):
           (btrim(upper(posttype::text)));""".format(self._target_schema)
 
         return value
+
 
 if __name__ == "__main__":
 
