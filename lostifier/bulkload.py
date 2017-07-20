@@ -201,6 +201,15 @@ class BulkLoader(object):
                     "DELETE FROM {0}.{1} where gcunqid = '{2}' ".format(self._target_schema, name, gcunqid), None, ""
                 )
 
+            # Create the new item
+            result = postgreslayer.CreateFeature(feature)
+
+            self._verify_results(result, gcunqid)
+            itemcount = itemcount + 1
+            feature = gdblayer_add.GetNextFeature()
+
+        self._logger.info('{0} items were added into {1}'.format(itemcount, name))
+
     def _process_layer(self, name, gdb, ogrds):
         """
         Process the adds and deletes for the layer.
@@ -229,7 +238,6 @@ class BulkLoader(object):
         Starting Location for the Change Only Process
 
         """
-
         ogrds = self._ogr_open_postgis()
         gdb = self._ogr_open_fgdb()
 
