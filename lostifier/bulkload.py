@@ -44,7 +44,7 @@ class BulkLoader(object):
         self._port = port
         self._user_name = user_name
         self._password = password
-        self._target_schema = target_schema
+        self._target_schema = target_schema.lower()
         self._layers_to_load = layers_to_load
         self._connection_string = 'host={0} user={1} password={2} dbname={3} port={4}'.format(
             self._host, self._user_name, self._password, self._database_name, self._port
@@ -181,7 +181,7 @@ class BulkLoader(object):
         feature = gdblayer_add.GetNextFeature()
         while feature is not None:
             # Grab the equivalent layer in PostGIS.
-            postgreslayer = ogrds.GetLayerByName(name)
+            postgreslayer = ogrds.GetLayerByName('{0}.{1}'.format(self._target_schema, name))
 
             # Clear FID so postgres will autogenerate next available in the sequence
             feature.SetFID(-1)
@@ -200,6 +200,17 @@ class BulkLoader(object):
                 ogrds.ExecuteSQL(
                     "DELETE FROM {0}.{1} where gcunqid = '{2}' ".format(self._target_schema, name, gcunqid), None, ""
                 )
+            # Create the new item
+
+            result = postgreslayer.CreateFeature(feature)
+
+            self._verify_results(result, gcunqid)
+
+            itemcount = itemcount + 1
+
+            feature = gdblayer_add.GetNextFeature()
+
+        self._logger.info('{0} items were added into {1}'.format(itemcount, name))
 
     def _process_layer(self, name, gdb, ogrds):
         """
@@ -229,7 +240,6 @@ class BulkLoader(object):
         Starting Location for the Change Only Process
 
         """
-
         ogrds = self._ogr_open_postgis()
         gdb = self._ogr_open_fgdb()
 
@@ -649,14 +659,16 @@ if __name__ == "__main__":
         'CountyBoundary', 'UnIncCommBoundary', 'IncMunicipalBoundary', 'StateBoundary', 'RoadCenterline', 'SSAP'
     ]
 
-    gdb_path = input("Please enter the complete source path for gdb file:")
+    # gdb_path = r'C:\SampleFile\20170403_161651_ChangeReport.gdb' # change import input("Please enter the complete source path for gdb file:")
+    gdb_path = r'C:\SampleFile\20170403_161651_ChangeReport.gdb' # full import input("Please enter the complete source path for gdb file:")
+
     script_mode = input("Select bulk import mode. Type 'C' for change only or type 'F' for a full gbd import.")
-    db_host = input("Enter the host name of the database:")
-    db_name = input("Enter the name of the database:")
-    db_port = input("Enter the database port:")
-    db_user = input("Enter the database user name:")
-    db_password = input("Enter the database password:")
-    db_target_schema = input("Enter the name of the provisioning schema:")
+    db_host = '192.168.11.121'#input("Enter the host name of the database:")
+    db_name = 'srgis' #input("Enter the name of the database:")
+    db_port = '5432'#input("Enter the database port:")
+    db_user = 'postgres'#input("Enter the database user name:")
+    db_password = 'GeoComm1'#input("Enter the database password:")
+    db_target_schema = 'Provisioning'#input("Enter the name of the provisioning schema:")
 
     bulkloader = BulkLoader(gdb_path, db_host, db_name, db_port, db_user, db_password, db_target_schema, layers_to_load)
 
