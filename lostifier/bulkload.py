@@ -44,7 +44,7 @@ class BulkLoader(object):
         self._port = port
         self._user_name = user_name
         self._password = password
-        self._target_schema = target_schema
+        self._target_schema = target_schema.lower()
         self._layers_to_load = layers_to_load
         self._connection_string = 'host={0} user={1} password={2} dbname={3} port={4}'.format(
             self._host, self._user_name, self._password, self._database_name, self._port
@@ -181,7 +181,7 @@ class BulkLoader(object):
         feature = gdblayer_add.GetNextFeature()
         while feature is not None:
             # Grab the equivalent layer in PostGIS.
-            postgreslayer = ogrds.GetLayerByName(name)
+            postgreslayer = ogrds.GetLayerByName('{0}.{1}'.format(self._target_schema, name))
 
             # Clear FID so postgres will autogenerate next available in the sequence
             feature.SetFID(-1)
@@ -200,6 +200,17 @@ class BulkLoader(object):
                 ogrds.ExecuteSQL(
                     "DELETE FROM {0}.{1} where gcunqid = '{2}' ".format(self._target_schema, name, gcunqid), None, ""
                 )
+            # Create the new item
+
+            result = postgreslayer.CreateFeature(feature)
+
+            self._verify_results(result, gcunqid)
+
+            itemcount = itemcount + 1
+
+            feature = gdblayer_add.GetNextFeature()
+
+        self._logger.info('{0} items were added into {1}'.format(itemcount, name))
 
             # Create the new item
             result = postgreslayer.CreateFeature(feature)
@@ -658,6 +669,7 @@ if __name__ == "__main__":
     ]
 
     gdb_path = input("Please enter the complete source path for gdb file:")
+
     script_mode = input("Select bulk import mode. Type 'C' for change only or type 'F' for a full gbd import.")
     db_host = input("Enter the host name of the database:")
     db_name = input("Enter the name of the database:")
