@@ -200,17 +200,6 @@ class BulkLoader(object):
                 ogrds.ExecuteSQL(
                     "DELETE FROM {0}.{1} where gcunqid = '{2}' ".format(self._target_schema, name, gcunqid), None, ""
                 )
-            # Create the new item
-
-            result = postgreslayer.CreateFeature(feature)
-
-            self._verify_results(result, gcunqid)
-
-            itemcount = itemcount + 1
-
-            feature = gdblayer_add.GetNextFeature()
-
-        self._logger.info('{0} items were added into {1}'.format(itemcount, name))
 
             # Create the new item
             result = postgreslayer.CreateFeature(feature)
