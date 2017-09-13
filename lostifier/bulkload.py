@@ -20,7 +20,7 @@ class BulkLoader(object):
     def __init__(self, gdb_path, host, database_name, port, user_name, password, target_schema, layers_to_load):
         """
         Constructor
-
+        
         :param gdb_path: Path to the input file geodatabase.
         :type gdb_path: ``str``
         :param host: The host name of the database server.
@@ -65,7 +65,7 @@ class BulkLoader(object):
     def _gdal_error_handler(self, err_class, err_num, err_msg):
         """
         Error handler for GDAL/OGR that pipes messages out to our logs.
-
+        
         :param err_class: GDAL/OGR error class
         :param err_num: GDAL/OGR error number
         :param err_msg: GDAL/OGR error message
@@ -84,7 +84,7 @@ class BulkLoader(object):
     def _connect_postgres_db(self):
         """
         Create a connection to postgres DB
-
+        
         :return: A psycopg2 connection object.
         """
         try:
@@ -100,7 +100,7 @@ class BulkLoader(object):
     def _ogr_open_fgdb(self):
         """
         Opens up the file geodatabase and returns a reference.
-
+        
         :return: An OGR connection to the file geodatabase.
         """
         self._logger.debug('Opening file geodatabase at {0}.'.format(self._gdb_path))
@@ -117,7 +117,7 @@ class BulkLoader(object):
     def _ogr_open_postgis(self):
         """
         Opens up a connection to PostGIS
-
+        
         :return: An OGR connection to PostGIS
         """
         ogr_connection_string = 'PG:{0}'.format(self._connection_string)
@@ -133,7 +133,7 @@ class BulkLoader(object):
     def _delete_item_from_gdb(self, gdblayer_del, name, ogrds):
         """
         Deletes an existing item from the postgres DB.
-
+        
         :param gdblayer_del:
         :param name:
         :param ogrds:
@@ -158,7 +158,7 @@ class BulkLoader(object):
     def _verify_results(self, result, gcunqid):
         """
         Verify an error code was not thrown by CreateFeature()
-
+        
         :param result:
         :param gcunqid:
         :return:
@@ -169,7 +169,7 @@ class BulkLoader(object):
     def _add_item_from_gdb(self, gdblayer_add, name, ogrds):
         """
         Inserts a new item or Updates an existing item in the postgres DB.
-
+        
         :param gdblayer_add:
         :param name:
         :param ogrds:
@@ -213,7 +213,7 @@ class BulkLoader(object):
     def _process_layer(self, name, gdb, ogrds):
         """
         Process the adds and deletes for the layer.
-
+        
         :param name: The name of the layer to process.
         :param gdb: The source file geodatabase.
         :param ogrds: The destination PostGIS database.
@@ -236,7 +236,7 @@ class BulkLoader(object):
     def change_only_gdb_import(self):
         """
         Starting Location for the Change Only Process
-
+        
         """
         ogrds = self._ogr_open_postgis()
         gdb = self._ogr_open_fgdb()
@@ -267,7 +267,7 @@ class BulkLoader(object):
     def full_gdb_import(self):
         """
         Process imports the full GDB overwriting any previous values.
-
+        
         :return:
         """
         # Get the provisioning schema ready.
@@ -311,7 +311,7 @@ class BulkLoader(object):
     def _reset_provisioning_schema(self):
         """
         Drops and recreates the provisioning schema.
-
+        
         """
         try:
             self._logger.info('Resetting target schema for bulk load provisioning . . .')
@@ -339,7 +339,7 @@ class BulkLoader(object):
     def _create_primary_key(self, processed_layers):
         """
         Alters each table's primary key to gcunqid field
-
+        
         :param processed_layers: The layers that were imported into the database.
         :type processed_layers: A list of ``str``
         """
@@ -353,10 +353,10 @@ class BulkLoader(object):
                 sqlstring = 'ALTER TABLE {0} DROP CONSTRAINT {1}_pkey;'.format(processed_layer, constraint_name)
                 cursor.execute(sqlstring)
 
-                sqlstring = 'ALTER TABLE {0} ADD PRIMARY KEY (gcunqid)'.format(processed_layer)
+                sqlstring = 'ALTER TABLE {0} ADD PRIMARY KEY (srcunqid)'.format(processed_layer)
                 cursor.execute(sqlstring)
 
-                self._logger.debug('Primary key has been set to gcunqid for the table {0}'.format(processed_layer))
+                self._logger.debug('Primary key has been set to srcunqid for the table {0}'.format(processed_layer))
 
         except psycopg2.Error as ex:
             self._logger.error(ex.pgerror)
@@ -366,7 +366,7 @@ class BulkLoader(object):
     def _create_sequence(self, processed_layers):
         """
         Update sequence values for the tables in postgres.
-
+        
         :param processed_layers: The layers that were imported into the database.
         :type processed_layers: A list of ``str``
         """
@@ -393,7 +393,7 @@ class BulkLoader(object):
     def _create_index(self):
         """
         Apply Index to specific fields in postgres tables
-
+        
         """
         try:
             con = self._connect_postgres_db()
@@ -422,224 +422,224 @@ class BulkLoader(object):
           ON srgis.{0}.ssap
           USING btree
           (btrim(upper(srcfulladr::text)));
-        
+
         -- Index: srgis.{0}.ssap_addnum_idx
         -- DROP INDEX srgis.{0}.ssap_addnum_idx;
         CREATE INDEX ssap_addnum_idx
           ON srgis.{0}.ssap
           USING btree
           (btrim(upper(addnum::text)));
-        
+
         -- Index: srgis.{0}.ssap_country_idx
         -- DROP INDEX srgis.{0}.ssap_country_idx;
         CREATE INDEX ssap_country_idx
           ON srgis.{0}.ssap
           USING btree
           (btrim(upper(country::text)));
-        
+
         -- Index: srgis.{0}.ssap_county_idx
         -- DROP INDEX srgis.{0}.ssap_county_idx;
         CREATE INDEX ssap_county_idx
           ON srgis.{0}.ssap
           USING btree
           (btrim(upper(county::text)));
-        
+
         -- Index: srgis.{0}.ssap_msagcomm_idx
         -- DROP INDEX srgis.{0}.ssap_msagcomm_idx;
         CREATE INDEX ssap_msagcomm_idx
           ON srgis.{0}.ssap
           USING btree
           (btrim(upper(msagcomm::text)));
-        
+
         -- Index: srgis.{0}.ssap_postcomm_idx
         -- DROP INDEX srgis.{0}.ssap_postcomm_idx_idx;
         CREATE INDEX ssap_postcomm_idx
           ON srgis.{0}.ssap
           USING btree
           (btrim(upper(postcomm::text)));
-        
+
         -- Index: srgis.{0}.ssap_postdir_idx
         -- DROP INDEX srgis.{0}.ssap_postdir_idx;
         CREATE INDEX ssap_postdir_idx
           ON srgis.{0}.ssap
           USING btree
           (btrim(upper(postdir::text)));
-        
+
         -- Index: srgis.{0}.ssap_predir_idx
         -- DROP INDEX srgis.{0}.ssap_predir_idx;
         CREATE INDEX ssap_predir_idx
           ON srgis.{0}.ssap
           USING btree
           (btrim(upper(predir::text)));
-        
+
         -- Index: srgis.{0}.ssap_state_idx
         -- DROP INDEX srgis.{0}.ssap_state_idx;
         CREATE INDEX ssap_state_idx
           ON srgis.{0}.ssap
           USING btree
           (btrim(upper(state::text)));
-        
+
         -- Index: srgis.{0}.ssap_strname_idx
         -- DROP INDEX srgis.{0}.ssap_strname_idx;
         CREATE INDEX ssap_strname_idx
           ON srgis.{0}.ssap
           USING btree
           (btrim(upper(strname::text)));
-        
+
         -- Index: srgis.{0}.ssap_posttype_idx
         -- DROP INDEX srgis.{0}.ssap_posttype_idx;
         CREATE INDEX ssap_posttype_idx
           ON srgis.{0}.ssap
           USING btree
           (btrim(upper(posttype::text)));
-        
+
         -- Index: srgis.{0}.ssap_zipcode_idx
         -- DROP INDEX srgis.{0}.ssap_zipcode_idx;
         CREATE INDEX ssap_zipcode_idx
           ON srgis.{0}.ssap
           USING btree
           (btrim(upper(zipcode::text)));
-        
+
         -- Index: srgis.{0}.roadcenterline_srcfullnam_idx
         -- DROP INDEX srgis.{0}.roadcenterline_srcfullnam_idx;
         CREATE INDEX roadcenterline_srcfullnam_idx
           ON srgis.{0}.roadcenterline
           USING btree
           (btrim(upper(srcfullnam::text)));
-        
+
         -- Index: srgis.{0}.roadcenterline_fromaddl_idx
         -- DROP INDEX srgis.{0}.roadcenterline_fromaddl_idx;
         CREATE INDEX roadcenterline_fromaddl_idx
           ON srgis.{0}.roadcenterline
           USING btree
           (btrim(upper(fromaddl::text)));
-        
+
         -- Index: srgis.{0}.roadcenterline_toaddl_idx
         -- DROP INDEX srgis.{0}.roadcenterline_toaddl_idx;
         CREATE INDEX roadcenterline_toaddl_idx
           ON srgis.{0}.roadcenterline
           USING btree
           (btrim(upper(toaddl::text)));
-        
+
         -- Index: srgis.{0}.roadcenterline_countryl_idx
         -- DROP INDEX srgis.{0}.roadcenterline_countryl_idx;
         CREATE INDEX roadcenterline_countryl_idx
           ON srgis.{0}.roadcenterline
           USING btree
           (btrim(upper(countryl::text)));
-        
+
         -- Index: srgis.{0}.roadcenterline_countyl_idx
         -- DROP INDEX srgis.{0}.roadcenterline_countyl_idx;
         CREATE INDEX roadcenterline_countyl_idx
           ON srgis.{0}.roadcenterline
           USING btree
           (btrim(upper(countyl::text)));
-        
+
         -- Index: srgis.{0}.roadcenterline_msagcomml_idx
         -- DROP INDEX srgis.{0}.roadcenterline_msagcomml_idx;
         CREATE INDEX roadcenterline_msagcomml_idx
           ON srgis.{0}.roadcenterline
           USING btree
           (btrim(upper(msagcomml::text)));
-        
+
         -- Index: srgis.{0}.roadcenterline_postcomml_idx
         -- DROP INDEX srgis.{0}.roadcenterline_postcomml_idx;
         CREATE INDEX roadcenterline_postcomml_idx
           ON srgis.{0}.roadcenterline
           USING btree
           (btrim(upper(postcomml::text)));
-        
+
         -- Index: srgis.{0}.roadcenterline_statel_idx
         -- DROP INDEX srgis.{0}.roadcenterline_statel_idx;
         CREATE INDEX roadcenterline_statel_idx
           ON srgis.{0}.roadcenterline
           USING btree
           (btrim(upper(statel::text)));
-        
+
         -- Index: srgis.{0}.roadcenterline_zipcodel_idx
         -- DROP INDEX srgis.{0}.roadcenterline_zipcodel_idx;
         CREATE INDEX roadcenterline_zipcodel_idx
           ON srgis.{0}.roadcenterline
           USING btree
           (btrim(upper(zipcodel::text)));
-        
+
         -- Index: srgis.{0}.roadcenterline_postdir_idx
         -- DROP INDEX srgis.{0}.roadcenterline_postdir_idx;
         CREATE INDEX roadcenterline_postdir_idx
           ON srgis.{0}.roadcenterline
           USING btree
           (btrim(upper(postdir::text)));
-        
+
         -- Index: srgis.{0}.roadcenterline_predir_idx
         -- DROP INDEX srgis.{0}.roadcenterline_predir_idx;
         CREATE INDEX roadcenterline_predir_idx
           ON srgis.{0}.roadcenterline
           USING btree
           (btrim(upper(predir::text)));
-        
+
         -- Index: srgis.{0}.roadcenterline_fromaddr_idx
         -- DROP INDEX srgis.{0}.roadcenterline_fromaddr_idx;
         CREATE INDEX roadcenterline_fromaddr_idx
           ON srgis.{0}.roadcenterline
           USING btree
           (btrim(upper(fromaddr::text)));
-        
+
         -- Index: srgis.{0}.roadcenterline_toaddr_idx
         -- DROP INDEX srgis.{0}.roadcenterline_toaddr_idx;
         CREATE INDEX roadcenterline_toaddr_idx
           ON srgis.{0}.roadcenterline
           USING btree
           (btrim(upper(toaddr::text)));
-        
+
         -- Index: srgis.{0}.roadcenterline_countryr_idx
         -- DROP INDEX srgis.{0}.roadcenterline_countryr_idx;
         CREATE INDEX roadcenterline_countryr_idx
           ON srgis.{0}.roadcenterline
           USING btree
           (btrim(upper(countryr::text)));
-        
+
         -- Index: srgis.{0}.roadcenterline_countyr_idx
         -- DROP INDEX srgis.{0}.roadcenterline_countyr_idx;
         CREATE INDEX roadcenterline_countyr_idx
           ON srgis.{0}.roadcenterline
           USING btree
           (btrim(upper(countyr::text)));
-        
+
         -- Index: srgis.{0}.roadcenterline_msagcommr_idx
         -- DROP INDEX srgis.{0}.roadcenterline_msagcommr_idx;
         CREATE INDEX roadcenterline_msagcommr_idx
           ON srgis.{0}.roadcenterline
           USING btree
           (btrim(upper(msagcommr::text)));
-        
+
         -- Index: srgis.{0}.roadcenterline_postcommr_idx
         -- DROP INDEX srgis.{0}.roadcenterline_postcommr_idx;
         CREATE INDEX roadcenterline_postcommr_idx
           ON srgis.{0}.roadcenterline
           USING btree
           (btrim(upper(postcommr::text)));
-        
+
         -- Index: srgis.{0}.roadcenterline_stater_idx
         -- DROP INDEX srgis.{0}.roadcenterline_stater_idx;
         CREATE INDEX roadcenterline_stater_idx
           ON srgis.{0}.roadcenterline
           USING btree
           (btrim(upper(stater::text)));
-        
+
         -- Index: srgis.{0}.roadcenterline_zipcoder_idx
         -- DROP INDEX srgis.{0}.roadcenterline_zipcoder_idx;
         CREATE INDEX roadcenterline_zipcoder_idx
           ON srgis.{0}.roadcenterline
           USING btree
           (btrim(upper(zipcoder::text)));
-        
+
         -- Index: srgis.{0}.roadcenterline_strname_idx
         -- DROP INDEX srgis.{0}.roadcenterline_strname_idx;
         CREATE INDEX roadcenterline_strname_idx
           ON srgis.{0}.roadcenterline
           USING btree
           (btrim(upper(strname::text)));
-        
+
         -- Index: srgis.{0}.roadcenterline_posttype_idx
         -- DROP INDEX srgis.{0}.roadcenterline_posttype_idx;
         CREATE INDEX roadcenterline_posttype_idx
