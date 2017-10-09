@@ -142,29 +142,29 @@ class BulkLoader(object):
         itemcount = 0
         feature = gdblayer_del.GetNextFeature()
         while feature is not None:
-            gcunqid = feature.GetFieldAsString(feature.GetFieldIndex("gcUnqID"))
+            srcunqid = feature.GetFieldAsString(feature.GetFieldIndex("srcunqid"))
 
-            self._logger.debug('Attempting to delete feature {0}.'.format(gcunqid))
+            self._logger.debug('Attempting to delete feature {0}.'.format(srcunqid))
             ogrds.ExecuteSQL(
-                "DELETE FROM {0}.{1} WHERE gcunqid = '{2}'".format(self._target_schema, name, gcunqid), None, ''
+                "DELETE FROM {0}.{1} WHERE srcunqid = '{2}'".format(self._target_schema, name, srcunqid), None, ''
             )
-            self._logger.debug('Successfully deleted feature {0}.'.format(gcunqid))
+            self._logger.debug('Successfully deleted feature {0}.'.format(srcunqid))
 
             itemcount = itemcount + 1
             feature = gdblayer_del.GetNextFeature()
 
         self._logger.info('{0} items were deleted from {1}'.format(itemcount, name))
 
-    def _verify_results(self, result, gcunqid):
+    def _verify_results(self, result, srcunqid):
         """
         Verify an error code was not thrown by CreateFeature()
         
         :param result:
-        :param gcunqid:
+        :param srcunqid:
         :return:
         """
         if result != 0:
-            raise NameError('Process failed while trying to add item:' + gcunqid)
+            raise NameError('Process failed while trying to add item:' + srcunqid)
 
     def _add_item_from_gdb(self, gdblayer_add, name, ogrds):
         """
@@ -185,26 +185,26 @@ class BulkLoader(object):
 
             # Clear FID so postgres will autogenerate next available in the sequence
             feature.SetFID(-1)
-            gcunqid = feature.GetFieldAsString('gcunqid')
+            srcunqid = feature.GetFieldAsString('srcunqid')
 
-            self._logger.debug('Attempting to add feature {0}.'.format(gcunqid))
+            self._logger.debug('Attempting to add feature {0}.'.format(srcunqid))
 
             # See if the feature exists already in the database.
             featureitems = ogrds.ExecuteSQL(
-                "SELECT * FROM {0}.{1} where gcunqid = '{2}' ".format(self._target_schema, name, gcunqid), None, ""
+                "SELECT * FROM {0}.{1} where srcunqid = '{2}' ".format(self._target_schema, name, srcunqid), None, ""
             )
             fcount = featureitems.GetFeatureCount(1)
 
             if fcount > 0:
-                # Remove item which has matching gcunqid
+                # Remove item which has matching srcunqid
                 ogrds.ExecuteSQL(
-                    "DELETE FROM {0}.{1} where gcunqid = '{2}' ".format(self._target_schema, name, gcunqid), None, ""
+                    "DELETE FROM {0}.{1} where srcunqid = '{2}' ".format(self._target_schema, name, srcunqid), None, ""
                 )
 
             # Create the new item
             result = postgreslayer.CreateFeature(feature)
 
-            self._verify_results(result, gcunqid)
+            self._verify_results(result, srcunqid)
             itemcount = itemcount + 1
             feature = gdblayer_add.GetNextFeature()
 
@@ -338,7 +338,7 @@ class BulkLoader(object):
 
     def _create_primary_key(self, processed_layers):
         """
-        Alters each table's primary key to gcunqid field
+        Alters each table's primary key to srcunqid field
         
         :param processed_layers: The layers that were imported into the database.
         :type processed_layers: A list of ``str``
