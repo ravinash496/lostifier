@@ -1,0 +1,13 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+from lostifier.cli import CoverageLoaderApp
+
+
+def main():
+    with CoverageLoaderApp() as app:
+        app.run()
+
+
+if __name__ == '__main__':
+    main()
