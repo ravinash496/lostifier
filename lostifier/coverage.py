@@ -25,7 +25,7 @@ class CivicCoverage(Base):
     __tablename__ = 'civiccoverage'
 
     id = Column(Integer, primary_key=True, nullable=False)
-    source = Column(String)
+    lostserver = Column(String)
     serviceurn = Column(String)
     country = Column(String)
     a1 = Column(String)
