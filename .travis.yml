@@ -1,0 +1,33 @@
+language: python
+python:
+- '3.6'
+branches:
+  only:
+  - master
+sudo: required
+env:
+  global:
+  - CPLUS_INCLUDE_PATH=/usr/include/gdal
+  - C_INCLUDE_PATH=/usr/include/gdal
+  - AWS_DEFAULT_REGION=us-west-2
+  - IMAGE_NAME=geocomm/lostifier
+  - REMOTE_IMAGE_URL=709177336629.dkr.ecr.us-west-2.amazonaws.com/geocomm/lostifier
+  - secure: xhhTeslBwzO75ml59lk50e2avctnm+E7m4ooBU7zGywdZv1uqALfb+cPl9dMp/CGUh+AiSKwDvPUobRSuErVFJFU7z+RyCJt1ClQs26eN4EjtopIGu9uD63vqhY5m2wDjvZIgMJMoF+TouQ8JoRja5UdJUz/MKsMoJIrEa0iU00bPTnhAEdb+ryEg+WUJdUGZK5NTDCBDAPD3/1DPBtxeUQ0PYyVHty+LFFmjeADBVINUOD6Gv3ZWOvvU5SxVTUMP+m1kuxuRK6Z+B1thT92UVb7Qs8w2KYDuSGLF0fkaCHJiTWsYtERDzA864J5x8OAauu4sluYVRFDw8kaYzTSjvyTroWPk3ILZHQtaGETUhZoBQ0MjPPMgdTGDzi959lYNJ2uEB4ILcw9W/A5OFbWp+aUpeNCRT2JQXodF1jsfz7WDvxkKcSlhe06Y3L+VYHYRmv6cWSID/JyEpIPCv+c+rWcsdQaKkIVyLFoxtFhIhG3jRK0FAE3aOC0RvPwnWvTkPAPzcVQX/RtDBNfQ3T5h/Mc4t39AazlEr0QSah89xgiaLjKTWGZv3K/E7zvYQsm2cXBx+MPJ81NkBXtb0mlctOe/+sCk+Af0i6urp2Rc4bO6QjJYdgHwk0TROI5/O63X3hsWx3qu41VKQiZVuyyQWa6ces/3E9PJQdcywnuwII=
+services:
+- docker
+script:
+- pytest --cov=sifmonitor ./tests/test_*
+install:
+- pip install -r requirements.txt
+- pip install coverage
+- pip install pytest-cov
+before_install:
+- sudo add-apt-repository -y ppa:ubuntugis/ppa -y
+- sudo apt-get update -q
+- sudo apt-get install -y gdal-bin libgdal-dev -y
+after_success:
+- coverage report
+- python setup.py sdist
+- curl -F package=@./dist/lostifier-0.0.1.tar.gz $GEMFURY_URL
+notifications:
+  webhooks: https://outlook.office.com/webhook/8e85e59c-da42-4a8e-ad98-a7f0173b2a0e@ba05d72b-83fc-45fc-873b-b2841e0752de/TravisCI/a0a34daa96724c4cb6309283da957e6a/56b9b902-14c4-4a02-8944-45059ec4524c
