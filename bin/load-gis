@@ -1,0 +1,15 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+from lostifier.cli import GisLoaderApp
+
+
+def main():
+    with GisLoaderApp() as app:
+        app.run()
+
+
+if __name__ == '__main__':
+    main()
+
+
