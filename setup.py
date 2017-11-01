@@ -9,6 +9,7 @@ This file is used to create the package uploaded to PyPI/GemFury.
 """
 
 import lostifier
+import os, sys
 from setuptools import setup, find_packages  # Always prefer setuptools over distutils
 from codecs import open  # To use a consistent encoding
 from os import path
@@ -19,12 +20,20 @@ here = path.abspath(path.dirname(__file__))
 with open(path.join(here, 'README'), encoding='utf-8') as f:
     long_description = f.read()
 
+# Get the base version from the library.
+version = lostifier.__version__
+
+# If the environment has a build number set...
+if os.getenv('TRAVIS_BUILD_NUMBER') is not None:
+    # ...append it to the version.
+    version = "{version}.{buildnum}".format(version=version, buildnum=os.getenv('TRAVIS_BUILD_NUMBER'))
+
 setup(
   name='lostifier',
   description="GeoComm's setup utilities for ECRF and LFV.",
   long_description="GeoComm's setup utilities for ECRF and LFV.",
   packages=find_packages(exclude=["docs", "*.tests", "*.tests.*", "tests.*", "tests"]),
-  version=lostifier.__version__,
+  version=version,
   install_requires=[
     'alabaster>=0.7.10',
     'appdirs>=1.4.3',
