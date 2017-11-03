@@ -41,7 +41,7 @@ setup(
     'cement>=2.10.2',
     'colorama>=0.3.9',
     'docutils>=0.13.1',
-    'GDAL>=2.1.0',
+    'GDAL>=2.1.3',
     'GeoAlchemy2>=0.4.0',
     'imagesize>=0.7.1',
     'Jinja2>=2.9.6',
