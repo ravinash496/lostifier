@@ -45,4 +45,4 @@ WORKDIR /lostifier
 
 # Set the default command to execute
 # when creating a new container
-CMD /bin/bash -c "source ./venv/bin/activate && load-coverage --help"
+CMD /bin/bash -c "source ./venv/bin/activate && load-gis --help"
