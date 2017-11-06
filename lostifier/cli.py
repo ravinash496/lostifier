@@ -12,7 +12,7 @@ from lostifier.exception import InvalidParameterException
 from lostifier.models import CoverageArguments
 from lostifier.command import LoadInvoker
 from lostifier.coverage import CoverageLoaderCommand, CivicCoverageLoader, GeodeticCoverageLoader
-from cement.core import backend
+from lostifier.bulkload import BulkLoader
 from cement.core.foundation import CementApp
 from cement.core.controller import CementBaseController, expose
 
@@ -32,29 +32,68 @@ class GisLoaderBaseController(CementBaseController):
 
         arguments = [
             (['-fgdb', '--filegeodatabase'], dict(action='store', help='The path to the input file geodatabase.')),
-            (['-hn', '--hostname'], dict(action='store_true', help='The database host name.')),
-            (['-p', '--port'], dict(action='store_true', help='The database port.')),
-            (['-d', '--database'], dict(action='store_true', help='The name of the database.')),
-            (['-u', '--username'], dict(action='store_true', help='The database username.')),
-            (['-pwd', '--password'], dict(action='store_true', help='The database password.')),
+            (['-hn', '--hostname'], dict(action='store', help='The database host name.')),
+            (['-p', '--port'], dict(action='store', help='The database port.')),
+            (['-d', '--database'], dict(action='store', help='The name of the database.')),
+            (['-u', '--username'], dict(action='store', help='The database username.')),
+            (['-pwd', '--password'], dict(action='store', help='The database password.')),
         ]
 
     @expose(hide=True, aliases=['run'])
     def default(self):
-        self.app.log.info('Inside base.default function.')
-        if self.app.pargs.csv:
-            self.app.log.info("Received option 'csv' with value '%s'." % self.app.pargs.csv)
-
-        if self.app.pargs.shp:
-            self.app.log.info("Received option 'shp' with value '%s'." % self.app.pargs.shp)
+        self.app.log.info('No command specified, proceeding with full GIS data load.')
+        self.load_full()
 
     @expose(help="Load a full GIS dataset.")
     def load_full(self):
-        self.app.log.info("Inside load_full function.")
+        self.app.log.info("Beginning full GIS dataset load.")
+        try:
+            bulkloader = self._build_bulkloader()
+            bulkloader.full_gdb_import()
+        except Exception:
+            print('An error was encountered and the process has been terminated.')
+            raise
 
     @expose(help="Load geodetic coverage data..")
     def load_changeonly(self):
-        self.app.log.info("Inside load_changeonly function.")
+        self.app.log.info("Beginning change only GIS dataset load.")
+        try:
+            bulkloader = self._build_bulkloader()
+            bulkloader.change_only_gdb_import()
+        except Exception:
+            print('An error was encountered and the process has been terminated.')
+            raise
+
+    def _build_bulkloader(self) -> BulkLoader:
+        """
+
+        :return:
+        """
+        if not self.app.pargs.filegeodatabase \
+                or not self.app.pargs.hostname \
+                or not self.app.pargs.port \
+                or not self.app.pargs.database \
+                or not self.app.pargs.username \
+                or not self.app.pargs.password:
+            self.app.log.error('Missing one or more required parameters.')
+            raise InvalidParameterException(
+                'Missing one of --filegeodatabase, --hostname, --port, --database, --username, or --password.'
+            )
+
+        # The list of layers we want to load.
+        layers_to_load = [
+            'CountyBoundary', 'UnIncCommBoundary', 'IncMunicipalBoundary', 'StateBoundary', 'RoadCenterline', 'SSAP'
+        ]
+
+        return BulkLoader(
+            self.app.pargs.filegeodatabase,
+            self.app.pargs.hostname,
+            self.app.pargs.database,
+            self.app.pargs.port,
+            self.app.pargs.username,
+            self.app.pargs.password,
+            'provisioning',
+            layers_to_load)
 
 
 class GisLoaderApp(CementApp):
@@ -110,7 +149,7 @@ class CoverageLoaderBaseController(CementBaseController):
         invoker.execute(CoverageLoaderCommand(receiver))
         self.app.log.info("Finished loading geodetic coverage data .")
 
-    def _package_args(self, require_civic:bool = False, require_geodetic:bool = False) -> CoverageArguments:
+    def _package_args(self, require_civic: bool = False, require_geodetic: bool = False) -> CoverageArguments:
         """
         Uses the CLI arguments to create an instance of CoverageArguments.
 
