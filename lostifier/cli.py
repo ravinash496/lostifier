@@ -13,6 +13,7 @@ from lostifier.models import CoverageArguments
 from lostifier.command import LoadInvoker
 from lostifier.coverage import CoverageLoaderCommand, CivicCoverageLoader, GeodeticCoverageLoader
 from lostifier.bulkload import BulkLoader
+from lostifier.dbinit import EcrfDbInitializer
 from cement.core.foundation import CementApp
 from cement.core.controller import CementBaseController, expose
 
@@ -37,6 +38,7 @@ class GisLoaderBaseController(CementBaseController):
             (['-d', '--database'], dict(action='store', help='The name of the database.')),
             (['-u', '--username'], dict(action='store', help='The database username.')),
             (['-pwd', '--password'], dict(action='store', help='The database password.')),
+            (['-f', '--flip'], dict(action='store_true', help='The database password.')),
         ]
 
     @expose(hide=True, aliases=['run'])
@@ -49,17 +51,18 @@ class GisLoaderBaseController(CementBaseController):
         self.app.log.info("Beginning full GIS dataset load.")
         try:
             bulkloader = self._build_bulkloader()
-            bulkloader.full_gdb_import()
+            bulkloader.full_gdb_import(flip_when_done=self.app.pargs.flip)
         except Exception:
             print('An error was encountered and the process has been terminated.')
             raise
+        self.app.log.info("Full GIS dataset load complete.")
 
     @expose(help="Load geodetic coverage data..")
     def load_changeonly(self):
         self.app.log.info("Beginning change only GIS dataset load.")
         try:
             bulkloader = self._build_bulkloader()
-            bulkloader.change_only_gdb_import()
+            bulkloader.change_only_gdb_import(flip_when_done=self.app.pargs.flip)
         except Exception:
             print('An error was encountered and the process has been terminated.')
             raise
@@ -185,3 +188,48 @@ class CoverageLoaderApp(CementApp):
     class Meta:
         label = 'coverage_loader'
         base_controller = CoverageLoaderBaseController
+
+
+class EcrfDbInitBaseController(CementBaseController):
+    """
+    The base controller for the database initialization utility.
+    """
+    class Meta:
+        label = 'base'
+        description = 'ECRF and LVF Database Creation Utility'
+
+        arguments = [
+            (['-hn', '--hostname'], dict(action='store', help='The database host name.')),
+            (['-p', '--port'], dict(action='store', help='The database port.')),
+            (['-d', '--database'], dict(action='store', help='The name of the database.')),
+            (['-u', '--username'], dict(action='store', help='The database username.')),
+            (['-pwd', '--password'], dict(action='store', help='The database password.')),
+        ]
+
+    @expose(hide=True, aliases=['run'])
+    def default(self):
+        self.app.log.info('Setting up the Ecrf database . . .')
+        if not self.app.pargs.hostname \
+                or not self.app.pargs.port \
+                or not self.app.pargs.database \
+                or not self.app.pargs.username \
+                or not self.app.pargs.password:
+            self.app.log.error('Missing one or more required database parameters.')
+            raise InvalidParameterException('Missing one of --hostname, --port, --database, --username, or --password.')
+
+        init_app: EcrfDbInitializer = EcrfDbInitializer(
+            host=self.app.pargs.hostname,
+            port=self.app.pargs.port,
+            database_name=self.app.pargs.database,
+            user_name=self.app.pargs.username,
+            password=self.app.pargs.password,
+        )
+
+        init_app.initialize()
+        self.app.log.info('Ecrf database ready.')
+
+
+class EcrfDbInitApp(CementApp):
+    class Meta:
+        label = 'ecrf_initializer'
+        base_controller = EcrfDbInitBaseController
