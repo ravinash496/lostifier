@@ -80,6 +80,7 @@ setup(
     'Programming Language :: Python :: 3.6',
   ],
   scripts=[
+    'bin/ecrf-init',
     'bin/load-gis',
     'bin/load-coverage',
   ]

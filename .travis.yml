@@ -33,7 +33,7 @@ before_install:
 after_success:
 - coverage report
 - python setup.py sdist
-- curl -F package=@./dist/lostifier-0.0.5.$TRAVIS_BUILD_NUMBER.tar.gz $GEMFURY_URL
+- curl -F package=@./dist/lostifier-3.0.0.$TRAVIS_BUILD_NUMBER.tar.gz $GEMFURY_URL
 - "./lostifier_push.sh"
 notifications:
   webhooks: https://outlook.office.com/webhook/8e85e59c-da42-4a8e-ad98-a7f0173b2a0e@ba05d72b-83fc-45fc-873b-b2841e0752de/TravisCI/a0a34daa96724c4cb6309283da957e6a/56b9b902-14c4-4a02-8944-45059ec4524c
