@@ -8,5 +8,5 @@
 ECRF and LVF setup utilities.
 """
 
-__version__ = '0.0.4'
-__release__ = '0.0.1'
+__version__ = '3.0.0'
+__release__ = '3.0.0'

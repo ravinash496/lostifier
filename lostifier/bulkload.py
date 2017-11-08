@@ -233,7 +233,7 @@ class BulkLoader(object):
         if gdblayer_add is not None:
             self._add_item_from_gdb(gdblayer_add, name, ogrds)
 
-    def change_only_gdb_import(self):
+    def change_only_gdb_import(self, flip_when_done=False):
         """
         Starting Location for the Change Only Process
         
@@ -262,9 +262,13 @@ class BulkLoader(object):
 
         # Commit transaction
         ogrds.CommitTransaction()
+
+        if flip_when_done:
+            self._flip_schemas()
+
         self._logger.info('All changes have been processed.')
 
-    def full_gdb_import(self):
+    def full_gdb_import(self, flip_when_done=False):
         """
         Process imports the full GDB overwriting any previous values.
         
@@ -308,6 +312,34 @@ class BulkLoader(object):
         self._create_sequence(processed_layers)
         self._create_index()
 
+        if flip_when_done:
+            self._flip_schemas()
+
+    def _flip_schemas(self):
+        """
+        Flips the active and provisioning schemas.
+
+        :return:
+        """
+        self._logger.info('Flipping active and provisioning schemas . . .')
+
+        sqlstring = """
+            BEGIN;
+            ALTER SCHEMA active RENAME TO bogus;
+            ALTER SCHEMA {0} RENAME TO active;
+            ALTER SCHEMA bogus RENAME TO {0};
+            COMMIT;
+        """.format(self._target_schema)
+        try:
+            with self._connect_postgres_db() as con:
+                con.autocommit = True
+                with con.cursor() as cursor:
+                    cursor.execute(sqlstring)
+            self._logger.info('Schemas flipped.')
+        except psycopg2.Error as ex:
+            self._logger.error(ex.pgerror)
+            raise
+
     def _reset_provisioning_schema(self):
         """
         Drops and recreates the provisioning schema.
@@ -315,26 +347,26 @@ class BulkLoader(object):
         """
         try:
             self._logger.info('Resetting target schema for bulk load provisioning . . .')
-            con = self._connect_postgres_db()
-            con.autocommit = True
-            cursor = con.cursor()
 
             sqlstring = "SELECT schema_name FROM information_schema.schemata WHERE schema_name = '{0}';".format(
                 self._target_schema
             )
-            cursor.execute(sqlstring)
-            if cursor.rowcount > 0:
-                sqlstring = 'DROP SCHEMA {0} CASCADE;'.format(self._target_schema)
-                cursor.execute(sqlstring)
 
-            sqlstring = 'CREATE SCHEMA {0};'.format(self._target_schema)
-            cursor.execute(sqlstring)
+            with self._connect_postgres_db() as con:
+                con.autocommit = True
+                with con.cursor() as cursor:
+                    cursor.execute(sqlstring)
+                    if cursor.rowcount > 0:
+                        sqlstring = 'DROP SCHEMA {0} CASCADE;'.format(self._target_schema)
+                        cursor.execute(sqlstring)
+
+                    sqlstring = 'CREATE SCHEMA {0};'.format(self._target_schema)
+                    cursor.execute(sqlstring)
+
             self._logger.info('Bulk load provisioning schema ready.')
 
         except psycopg2.Error as ex:
             self._logger.error(ex.pgerror)
-        finally:
-            con.close()
 
     def _create_primary_key(self, processed_layers):
         """

@@ -9,18 +9,23 @@ env:
   global:
   - CPLUS_INCLUDE_PATH=/usr/include/gdal
   - C_INCLUDE_PATH=/usr/include/gdal
-  - AWS_DEFAULT_REGION=us-west-2
   - IMAGE_NAME=geocomm/lostifier
   - REMOTE_IMAGE_URL=709177336629.dkr.ecr.us-west-2.amazonaws.com/geocomm/lostifier
+  - AWS_DEFAULT_REGION=us-west-2
   - secure: xhhTeslBwzO75ml59lk50e2avctnm+E7m4ooBU7zGywdZv1uqALfb+cPl9dMp/CGUh+AiSKwDvPUobRSuErVFJFU7z+RyCJt1ClQs26eN4EjtopIGu9uD63vqhY5m2wDjvZIgMJMoF+TouQ8JoRja5UdJUz/MKsMoJIrEa0iU00bPTnhAEdb+ryEg+WUJdUGZK5NTDCBDAPD3/1DPBtxeUQ0PYyVHty+LFFmjeADBVINUOD6Gv3ZWOvvU5SxVTUMP+m1kuxuRK6Z+B1thT92UVb7Qs8w2KYDuSGLF0fkaCHJiTWsYtERDzA864J5x8OAauu4sluYVRFDw8kaYzTSjvyTroWPk3ILZHQtaGETUhZoBQ0MjPPMgdTGDzi959lYNJ2uEB4ILcw9W/A5OFbWp+aUpeNCRT2JQXodF1jsfz7WDvxkKcSlhe06Y3L+VYHYRmv6cWSID/JyEpIPCv+c+rWcsdQaKkIVyLFoxtFhIhG3jRK0FAE3aOC0RvPwnWvTkPAPzcVQX/RtDBNfQ3T5h/Mc4t39AazlEr0QSah89xgiaLjKTWGZv3K/E7zvYQsm2cXBx+MPJ81NkBXtb0mlctOe/+sCk+Af0i6urp2Rc4bO6QjJYdgHwk0TROI5/O63X3hsWx3qu41VKQiZVuyyQWa6ces/3E9PJQdcywnuwII=
+  - secure: 6Sw9Mw8kR3v5NaZCIkzS5xpSHgghhsZbkI8QfgzOk8lIuPTLrLrPtDZVVbIWbhyfeF32cUIw1k9fMamH6vWiuyppVUy/OcrZB6jjPtDM6a875u4aPHej2ZyNqCUIMNIbRnJfWmuWMj3ijKUFdHHlSy4aF4mhIJaqd8umxNdJ7cZcJsG9YkZlY2WNsvs/H6DyYGkuU8dAdhDVV+WzNWM52sB1UcZPKsQdUQLEeXWBC0JybDYt7kWYFWGeeUX/9bNHN9zSmxPB/kRykg9KvYih+osfRYESnO0W6hp9+072td1655dtJg6qPIdC2zL35zMOd9VK1X28tppl8s43RyjlJWVKbKNOUUPwYjZywkVxhYu/Vu1h/OUYS/bUdc9jFKYItZ96kQdlTtqDGsuuxh1+z9JxvWuNZnhUrMRlSrKG9oSm24mKFHxSryFQ9HKs5srjpOzSTPxnSom0q/QMMV0nFc2JZr51ZeJ+YcrMqOZ6as0cfDsqx6GcD531V3H1gNNnjAOxUjoZ/xRQ2xM5ryyFJ0dThV3Bo/L35OttnfgjGpsNDrn7I/UGzdrc9vf96eoKHmku9M7luBlmNYm6iWCdtX7pdZt8VkAbgF1B8hjQAiQUg1CIBGCXVz4eYUcClw9apd1+PfkJQ0OjRyEKNYzGExzXRwd6CH17XzOVez2CoPU=
+  - secure: Gc5Zh+dyWlYSlZY9vqDzE4TFeBoZjuhMZKMZ4mvRCM/d58EXIYBbImywaaPp42PKTEZxHIrF/HRPpjG7ULNsWHiFP3OUlGMB7Ir/rjNaFVPrSJ2YO6hPQJkQFS50oPvhBp+lWEtvfJJ52L7wl+kElWqyQyagcbgB47ElP8swH3LjaHnRTG+jXuTRs/8Eh8hAhtzGH0qR8w/0fZ2UkZL5jEnUskcijnnxXJxumjVEQmfks4uS+J4zvXH5A9w7qyeGfE77XWEjT5quPUrDDd1sHv+hOODJ7zX8qAoCg1We7y8JRhcRrgt1rkwe541EI+qEMVTF7QP1DF5Vd4imiAgnhzrTQ+ElKJeyptgqPflnga9llN6kE1ilpJaeHQ8ZgEzHyY6alXpTjwe4YU2wf3Vc/23mlKitOjQaVMax/BjEfcSraSWkcYQUswvg0g4RV354WwI20WNSGUG3mOexw2+jWsDwtr0eaD7rLcwf3ZxZ30CldfePeZ2u8YAiAkwL2IlPXpDqSPN963143zYig7Lv+AxHk7fYwGHNsfIcje/dxLBw62+uQ0hbcxIdNPN2SWGHKEh+KZXrrZEui6NQm3fLsCEkbWQh21iGheMLtNTLjVAW5df72Jnhu24BR2lHAVVTgtmkF7EHIzYtPgzjyIhim5UwpbHddbjInFic3NA/T/o=
 services:
 - docker
+before_script:
+- chmod +x ./lostifier_push.sh
 script:
-- pytest --cov=sifmonitor ./tests/test_*
+- pytest --cov=lostifier ./tests/test_*
 install:
 - pip install -r requirements.txt
 - pip install coverage
 - pip install pytest-cov
+- pip install awscli
 before_install:
 - sudo add-apt-repository -y ppa:ubuntugis/ppa -y
 - sudo apt-get update -q
@@ -28,6 +33,7 @@ before_install:
 after_success:
 - coverage report
 - python setup.py sdist
-- curl -F package=@./dist/lostifier-0.0.1.tar.gz $GEMFURY_URL
+- curl -F package=@./dist/lostifier-3.0.0.$TRAVIS_BUILD_NUMBER.tar.gz $GEMFURY_URL
+- "./lostifier_push.sh"
 notifications:
   webhooks: https://outlook.office.com/webhook/8e85e59c-da42-4a8e-ad98-a7f0173b2a0e@ba05d72b-83fc-45fc-873b-b2841e0752de/TravisCI/a0a34daa96724c4cb6309283da957e6a/56b9b902-14c4-4a02-8944-45059ec4524c
