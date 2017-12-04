@@ -80,7 +80,11 @@ class EcrfDbInitializer(object):
 
         :return:
         """
-        self._logger.info('Creating the srgis database . . .')
+
+        self._logger.info('Removing {0} database if it already exists . . .'.format(self._database_name))
+        self._execute_command(self._root_connection_string, 'DROP DATABASE IF EXISTS {0};'.format(self._database_name))
+
+        self._logger.info('Creating the {0} database . . .'.format(self._database_name))
         self._execute_command(self._root_connection_string, 'CREATE DATABASE {0};'.format(self._database_name))
 
         self._logger.info('Installing postgis extension . . .')

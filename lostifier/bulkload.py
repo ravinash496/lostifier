@@ -13,6 +13,13 @@ C - Change only - Reads an Add and Delete table for each layer, and processes ea
 import logging
 import psycopg2 as psycopg2
 from osgeo import ogr, gdal
+from civvy.db.postgis.query import PgQueryExecutor
+from civvy.db.postgis.indexes import EmptyValueIndexTask
+from civvy.db.postgis.indexes import LowercaseValueIndexTask
+from civvy.db.postgis.locating.indexes import CreateMetaphoneIndexTask
+from civvy.locating import CivicAddressSourceMapCollection
+from civvy.db.postgis.locating.points import PgPointsLocatingIndexer
+from civvy.db.postgis.locating.streets import PgStreetsLocatingIndexer
 
 
 class BulkLoader(object):
@@ -308,9 +315,11 @@ class BulkLoader(object):
                 tablename = ogrds.CopyLayer(layer, layername, options).GetName()
                 processed_layers.append(tablename)
 
+        self._make_gcunqic_nullable(processed_layers)
         self._create_primary_key(processed_layers)
         self._create_sequence(processed_layers)
         self._create_index()
+        self._create_civvy_indexes()
 
         if flip_when_done:
             self._flip_schemas()
@@ -367,6 +376,28 @@ class BulkLoader(object):
 
         except psycopg2.Error as ex:
             self._logger.error(ex.pgerror)
+
+    def _make_gcunqic_nullable(self, processed_layers):
+        """
+        Alters each table to make the gcunqid fiel dnullable.
+
+        :param processed_layers: The layers that were imported into the database.
+        :type processed_layers: A list of ``str``
+        """
+        try:
+            con = self._connect_postgres_db()
+            con.autocommit = True
+            cursor = con.cursor()
+
+            for processed_layer in processed_layers:
+                sqlstring = 'ALTER TABLE {0} ALTER COLUMN gcunqid DROP NOT NULL'.format(processed_layer)
+                cursor.execute(sqlstring)
+                self._logger.debug('NOT NULL removed from gcunqid in {0}'.format(processed_layer))
+
+        except psycopg2.Error as ex:
+            self._logger.error(ex.pgerror)
+        finally:
+            con.close()
 
     def _create_primary_key(self, processed_layers):
         """
@@ -680,6 +711,120 @@ class BulkLoader(object):
           (btrim(upper(posttype::text)));""".format(self._target_schema)
 
         return value
+
+    def _create_civvy_indexes(self):
+        """
+        Create all the indexes Civvy needs to do it's magic.
+
+        """
+
+        # okay, this string replacement thing is hacky, but it works. json is a pain to deal with in string literals.
+        jsons = '''
+                {
+                    "streets" : {
+                        "extras" : {
+                            "schema" : "***"
+                        },
+                        "collection" : "roadcenterline",
+                        "geometry" : "wkb_geometry",
+                        "label" : ["predir", "pretype", "strname", "posttype", "postdir"],
+                        "properties" : {
+                            "country" : ["countryl", "countryr"],
+                            "a1" : ["statel", "stater"],
+                            "a2" : ["countyl", "countyr"],
+                            "a3" : ["incmunil", "incmunir", "uninccomml", "uninccommr"],
+                            "a6" : "strname",
+                            "prd" : "predir",
+                            "pod" : "postdir",
+                            "sts" : "posttype",
+                            "hno" : ["fromaddl", "toaddl", "fromaddr", "toaddr"],
+                            "pc" : ["zipcodel", "zipcoder"]
+                        },
+                        "sides" : {
+                            "left" : [
+                                "statel", "countyl", "incmunil", "uninccomml", "fromaddl", "toaddl", "zipcodel"
+                            ],
+                            "right" : [
+                                "stater", "countyr" , "incmunir", "uninccomml", "fromaddr", "toaddr", "zipcoder"
+                            ]
+                        },
+                        "ranges" : {
+                            "bottom" : [ "fromaddl", "fromaddr" ],
+                            "top" : [ "toaddl", "toaddr" ]
+                        }
+                    },
+                    "points" : {
+                        "extras" : {
+                            "schema" : "***"
+                        },
+                        "collection" : "ssap",
+                        "geometry" : "wkb_geometry",
+                        "label" : ["addnum", "predir", "pretype", "strname", "posttype", "postdir"],
+                        "properties" : {
+                            "country" : "country",
+                            "a1" : "state",
+                            "a3" : ["incmuni", "uninccomm"],
+                            "a6" : "strname",
+                            "prd" : "predir",
+                            "pod" : "postdir",
+                            "sts" : "posttype",
+                            "hno" : "addnum",
+                            "hns" : "addnumsuf",
+                            "lmk" : "landmark",
+                            "pc" : "zipcode"
+                        }
+                    }
+                }
+                '''.replace('***', self._target_schema)
+
+        query_executor = PgQueryExecutor(host=self._host,
+                                         port=int(self._port),
+                                         database=self._database_name,
+                                         user=self._user_name,
+                                         password=self._password)
+
+        # empty value index . . .
+        self._logger.info('Adding civvy empty value index . . .')
+        index_task = EmptyValueIndexTask(table_name='ssap',
+                                         field_name='strname',
+                                         schema=self._target_schema)
+        index_task.execute(query_executor)
+
+        # lowercase value index . . .
+        self._logger.info('Adding civvy lowercase value index . . .')
+        index_task = LowercaseValueIndexTask(table_name='ssap',
+                                             field_name='strname',
+                                             schema=self._target_schema)
+        index_task.execute(query_executor)
+
+        # metahpone index . . .
+        self._logger.info('Adding civvy metaphone index . . .')
+        index_task = CreateMetaphoneIndexTask(table_name='ssap',
+                                              field_name='strname',
+                                              max_output_len=4,
+                                              schema=self._target_schema)
+        index_task.execute(query_executor)
+
+        self._logger.debug('Dumping civvy config:')
+        self._logger.debug(jsons)
+
+        source_maps = CivicAddressSourceMapCollection(config=jsons)
+
+        # points index . . .
+        self._logger.info('Adding civvy points index . . .')
+        index_task = PgPointsLocatingIndexer(query_executor=query_executor, source_maps=source_maps)
+        for report in index_task.execute_tasks():
+            print("{desc}: {code} (Detail: {detail})".format(desc=report.task.description,
+                                                             code=report.result.code.value,
+                                                             detail=report.result.detail))
+
+        # streets index . . .
+        self._logger.info('Adding civvy streets index . . .')
+        index_task = PgStreetsLocatingIndexer(query_executor=query_executor, source_maps=source_maps)
+        for report in index_task.execute_tasks():
+            print("{desc}: {code} (Detail: {detail})".format(desc=report.task.description,
+                                                             code=report.result.code.value,
+                                                             detail=report.result.detail))
 
 
 if __name__ == "__main__":
