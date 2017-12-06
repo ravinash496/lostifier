@@ -20,6 +20,11 @@ from civvy.db.postgis.locating.indexes import CreateMetaphoneIndexTask
 from civvy.locating import CivicAddressSourceMapCollection
 from civvy.db.postgis.locating.points import PgPointsLocatingIndexer
 from civvy.db.postgis.locating.streets import PgStreetsLocatingIndexer
+import datetime
+
+provision_history_layers = []
+duration = 0
+partial_count = 0
 
 
 class BulkLoader(object):
@@ -146,6 +151,7 @@ class BulkLoader(object):
         :param ogrds:
         :return:
         """
+
         itemcount = 0
         feature = gdblayer_del.GetNextFeature()
         while feature is not None:
@@ -161,6 +167,8 @@ class BulkLoader(object):
             feature = gdblayer_del.GetNextFeature()
 
         self._logger.info('{0} items were deleted from {1}'.format(itemcount, name))
+        global partial_count
+        partial_count = itemcount
 
     def _verify_results(self, result, srcunqid):
         """
@@ -216,6 +224,8 @@ class BulkLoader(object):
             feature = gdblayer_add.GetNextFeature()
 
         self._logger.info('{0} items were added into {1}'.format(itemcount, name))
+        global partial_count
+        partial_count = itemcount
 
     def _process_layer(self, name, gdb, ogrds):
         """
@@ -245,6 +255,8 @@ class BulkLoader(object):
         Starting Location for the Change Only Process
         
         """
+        global duration
+        start = datetime.datetime.now()
         ogrds = self._ogr_open_postgis()
         gdb = self._ogr_open_fgdb()
 
@@ -253,6 +265,7 @@ class BulkLoader(object):
 
         # For each layer name in our list of layers to load . . .
         for name in self._layers_to_load:
+            provision_history_layers.append(name)
             self._process_layer(name, gdb, ogrds)
 
         for i in range(gdb.GetLayerCount()):
@@ -264,7 +277,7 @@ class BulkLoader(object):
                 # Trim off _add or _delete from the layer name and pass it to _process_layer()
                 trimedlayername = layername.strip('_add')
                 trimedlayername = trimedlayername.strip('_del')
-
+                provision_history_layers.append(trimedlayername)
                 self._process_layer(trimedlayername, gdb, ogrds)
 
         # Commit transaction
@@ -272,6 +285,10 @@ class BulkLoader(object):
 
         if flip_when_done:
             self._flip_schemas()
+
+        stop = datetime.datetime.now()
+
+        duration = (stop - start).total_seconds()
 
         self._logger.info('All changes have been processed.')
 
@@ -281,7 +298,11 @@ class BulkLoader(object):
         
         :return:
         """
+        global duration
         # Get the provisioning schema ready.
+        start = datetime.datetime.now()
+
+        self._create_provisioning_history_table()
         self._reset_provisioning_schema()
 
         ogrds = self._ogr_open_postgis()
@@ -301,6 +322,7 @@ class BulkLoader(object):
             if layer is not None:
                 layername = layer.GetName()
                 self._logger.info('Importing layer :: {0}'.format(layername))
+                provision_history_layers.append(layername)
                 tablename = ogrds.CopyLayer(layer, name, options).GetName()
                 processed_layers.append(tablename)
 
@@ -310,12 +332,14 @@ class BulkLoader(object):
             layer = gdb.GetLayerByIndex(i)
             layername = layer.GetName()
             layername = str(layername)
+
             if layername.upper().startswith("ESB") or layername.upper().startswith("ALOC"):
-                self._logger.info('Importing layer :: {0}'.format(layername))
+                provision_history_layers.append(layername)
+                self._logger.info('Importing other layer :: {0}'.format(layername))
                 tablename = ogrds.CopyLayer(layer, layername, options).GetName()
                 processed_layers.append(tablename)
 
-        self._make_gcunqic_nullable(processed_layers)
+        self._make_gcunqid_nullable(processed_layers)
         self._create_primary_key(processed_layers)
         self._create_sequence(processed_layers)
         self._create_index()
@@ -323,6 +347,34 @@ class BulkLoader(object):
 
         if flip_when_done:
             self._flip_schemas()
+        stop = datetime.datetime.now()
+
+        duration = (stop - start).total_seconds()
+
+    def _create_provisioning_history_table(self):
+        """
+        creates provisioning history table in public schema
+        :return: 
+        """
+
+        try:
+            con = self._connect_postgres_db()
+            con.autocommit = True
+            cursor = con.cursor()
+            sqlstring = """CREATE TABLE public.provisioning_history
+                        (
+                            provisioning_type character varying(75) COLLATE pg_catalog."default",
+                            layer character varying(75) COLLATE pg_catalog."default",
+                            count_row numeric(1000,0),
+                            last_modified character varying(75),
+                            duration character varying(75)
+                        )"""
+            cursor.execute(sqlstring)
+            self._logger.info('provisioning history table created in public schema')
+        except psycopg2.Error as ex:
+            self._logger.error(ex.pgerror)
+        finally:
+            con.close()
 
     def _flip_schemas(self):
         """
@@ -377,9 +429,9 @@ class BulkLoader(object):
         except psycopg2.Error as ex:
             self._logger.error(ex.pgerror)
 
-    def _make_gcunqic_nullable(self, processed_layers):
+    def _make_gcunqid_nullable(self, processed_layers):
         """
-        Alters each table to make the gcunqid fiel dnullable.
+        Alters each table to make the gcunqid field nullable.
 
         :param processed_layers: The layers that were imported into the database.
         :type processed_layers: A list of ``str``
@@ -826,6 +878,38 @@ class BulkLoader(object):
                                                              code=report.result.code.value,
                                                              detail=report.result.detail))
 
+    def provisioning_history_log(self, type, layers):
+        """
+        logs into provisioning_history_table in public schema
+        :param type: 
+        :param layers: 
+        :return: 
+        """
+
+        if type == 'bulkload_change':
+            row_count_value = partial_count
+
+        try:
+            con = self._connect_postgres_db()
+            con.autocommit = True
+            cursor = con.cursor()
+            sql = ''
+            for layer in layers:
+                if type == 'bulkload_full':
+                    row_count_value = "(SELECT COUNT(*) from provisioning.{})".format(layer)
+                sql += """INSERT INTO public.provisioning_history(provisioning_type, layer, count_row, last_modified, duration)
+            VALUES('{}', '{}', {}, '{}','{}');""".format(type, layer, row_count_value,
+                                                         datetime.datetime.now(),
+                                                         duration)
+            cursor.execute(sql)
+            self._logger.info('provisioning history table inserted in public schema')
+
+        except psycopg2.Error as ex:
+            self._logger.error(ex.pgerror)
+
+        finally:
+            con.close()
+
 
 if __name__ == "__main__":
 
@@ -848,11 +932,14 @@ if __name__ == "__main__":
 
     try:
         if script_mode.lower() == 'c':
+            provision_history_typename = "bulkload_change"
             bulkloader.change_only_gdb_import()
         elif script_mode.lower() == 'f':
+            provision_history_typename = "bulkload_full"
             bulkloader.full_gdb_import()
         else:
             print("Invalid option detected, goodbye")
+        bulkloader.provisioning_history_log(provision_history_typename, provision_history_layers)
     except NameError:
         print('An error was encountered and the process has been terminated.')
         raise
