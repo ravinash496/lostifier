@@ -22,14 +22,10 @@ from civvy.db.postgis.locating.points import PgPointsLocatingIndexer
 from civvy.db.postgis.locating.streets import PgStreetsLocatingIndexer
 import datetime
 
-provision_history_layers = []
-duration = 0
-partial_count = 0
-
 
 class BulkLoader(object):
-
-    def __init__(self, gdb_path, host, database_name, port, user_name, password, target_schema, layers_to_load):
+    def __init__(self, gdb_path, host, database_name, port, user_name, password, target_schema, layers_to_load,
+                 script_mode):
         """
         Constructor
         
@@ -70,6 +66,17 @@ class BulkLoader(object):
         consolehandler.setLevel(logging.DEBUG)
         consolehandler.setFormatter(formatter)
         self._logger.addHandler(consolehandler)
+        self._script_mode = script_mode.lower()
+
+        self._provision_history_layers = []
+        self._duration = 0
+        self._partial_count = 0
+        self._provisioning_status_flag = 'success'
+        self._provisioning_status_message = 'good'
+        if self._script_mode == 'c':
+            self._provision_type = 'bulkload_change'
+        else:
+            self._provision_type = 'bulkload_full'
 
         # Set up logging for GDAL/OGR
         gdal.PushErrorHandler(self._gdal_error_handler)
@@ -103,6 +110,9 @@ class BulkLoader(object):
             self._logger.debug('Opening psycopg2 connection to {0} on {1}.'.format(self._database_name, self._host))
             con = psycopg2.connect(self._connection_string)
         except psycopg2.Error as ex:
+            self._provisioning_status_flag = 'fail'
+            self._provisioning_status_message = ex
+            self.provisioning_history_log(self._provision_type, self._provision_history_layers)
             self._logger.error(ex.pgerror)
             raise
 
@@ -121,6 +131,9 @@ class BulkLoader(object):
 
         if gdb is None:
             self._logger.error('Unable to open file geodatabase.')
+            self._provisioning_status_flag = False
+            self._provisioning_status_message = 'Unable to open file geodatabase.'
+            self.provisioning_history_log(self._provision_type, self._provision_history_layers)
             raise Exception
 
         self._logger.info('File geodatabase connection successful.')
@@ -137,6 +150,9 @@ class BulkLoader(object):
         ogrds = ogr.Open(ogr_connection_string, 1)
         if ogrds is None:
             self._logger.error('Unable to open PostGIS.')
+            self._provisioning_status_flag = False
+            self._provisioning_status_message = 'Unable to open PostGIS.'
+            self.provisioning_history_log(self._provision_type, self._provision_history_layers)
             raise Exception
 
         self._logger.info('Ogr connection to PostGIS successful.')
@@ -255,17 +271,17 @@ class BulkLoader(object):
         Starting Location for the Change Only Process
         
         """
-        global duration
-        start = datetime.datetime.now()
+        start_time = datetime.datetime.now()
         ogrds = self._ogr_open_postgis()
         gdb = self._ogr_open_fgdb()
+        provision_history_typename = "bulkload_change"
 
         # Start Transaction
         ogrds.StartTransaction()
 
         # For each layer name in our list of layers to load . . .
         for name in self._layers_to_load:
-            provision_history_layers.append(name)
+            self._provision_history_layers.append(name)
             self._process_layer(name, gdb, ogrds)
 
         for i in range(gdb.GetLayerCount()):
@@ -277,7 +293,7 @@ class BulkLoader(object):
                 # Trim off _add or _delete from the layer name and pass it to _process_layer()
                 trimedlayername = layername.strip('_add')
                 trimedlayername = trimedlayername.strip('_del')
-                provision_history_layers.append(trimedlayername)
+                self._provision_history_layers.append(trimedlayername)
                 self._process_layer(trimedlayername, gdb, ogrds)
 
         # Commit transaction
@@ -286,9 +302,11 @@ class BulkLoader(object):
         if flip_when_done:
             self._flip_schemas()
 
-        stop = datetime.datetime.now()
+        end_time = datetime.datetime.now()
 
-        duration = (stop - start).total_seconds()
+        self._duration = (end_time - start_time)
+
+        self.provisioning_history_log(provision_history_typename, self._provision_history_layers)
 
         self._logger.info('All changes have been processed.')
 
@@ -298,11 +316,10 @@ class BulkLoader(object):
         
         :return:
         """
-        global duration
         # Get the provisioning schema ready.
-        start = datetime.datetime.now()
 
-        self._create_provisioning_history_table()
+        start_time = datetime.datetime.now()
+
         self._reset_provisioning_schema()
 
         ogrds = self._ogr_open_postgis()
@@ -322,7 +339,7 @@ class BulkLoader(object):
             if layer is not None:
                 layername = layer.GetName()
                 self._logger.info('Importing layer :: {0}'.format(layername))
-                provision_history_layers.append(layername)
+                self._provision_history_layers.append(layername)
                 tablename = ogrds.CopyLayer(layer, name, options).GetName()
                 processed_layers.append(tablename)
 
@@ -334,8 +351,8 @@ class BulkLoader(object):
             layername = str(layername)
 
             if layername.upper().startswith("ESB") or layername.upper().startswith("ALOC"):
-                provision_history_layers.append(layername)
-                self._logger.info('Importing other layer :: {0}'.format(layername))
+                self._provision_history_layers.append(layername)
+                self._logger.info('Importing layer :: {0}'.format(layername))
                 tablename = ogrds.CopyLayer(layer, layername, options).GetName()
                 processed_layers.append(tablename)
 
@@ -344,37 +361,12 @@ class BulkLoader(object):
         self._create_sequence(processed_layers)
         self._create_index()
         self._create_civvy_indexes()
-
         if flip_when_done:
             self._flip_schemas()
-        stop = datetime.datetime.now()
+        end_time = datetime.datetime.now()
 
-        duration = (stop - start).total_seconds()
-
-    def _create_provisioning_history_table(self):
-        """
-        creates provisioning history table in public schema
-        :return: 
-        """
-
-        try:
-            con = self._connect_postgres_db()
-            con.autocommit = True
-            cursor = con.cursor()
-            sqlstring = """CREATE TABLE public.provisioning_history
-                        (
-                            provisioning_type character varying(75) COLLATE pg_catalog."default",
-                            layer character varying(75) COLLATE pg_catalog."default",
-                            count_row numeric(1000,0),
-                            last_modified character varying(75),
-                            duration character varying(75)
-                        )"""
-            cursor.execute(sqlstring)
-            self._logger.info('provisioning history table created in public schema')
-        except psycopg2.Error as ex:
-            self._logger.error(ex.pgerror)
-        finally:
-            con.close()
+        self._duration = (end_time - start_time)
+        self.provisioning_history_log(self._provision_type, self._provision_history_layers)
 
     def _flip_schemas(self):
         """
@@ -398,6 +390,9 @@ class BulkLoader(object):
                     cursor.execute(sqlstring)
             self._logger.info('Schemas flipped.')
         except psycopg2.Error as ex:
+            self._provisioning_status_flag = False
+            self._provisioning_status_message = ex
+            self.provisioning_history_log(self._provision_type, self._provision_history_layers)
             self._logger.error(ex.pgerror)
             raise
 
@@ -427,6 +422,9 @@ class BulkLoader(object):
             self._logger.info('Bulk load provisioning schema ready.')
 
         except psycopg2.Error as ex:
+            self._provisioning_status_flag = False
+            self._provisioning_status_message = ex
+            self.provisioning_history_log(self._provision_type, self._provision_history_layers)
             self._logger.error(ex.pgerror)
 
     def _make_gcunqid_nullable(self, processed_layers):
@@ -878,15 +876,15 @@ class BulkLoader(object):
                                                              code=report.result.code.value,
                                                              detail=report.result.detail))
 
-    def provisioning_history_log(self, type, layers):
+    def provisioning_history_log(self, provision_type, layers):
         """
         logs into provisioning_history_table in public schema
-        :param type: 
+        :param provision_type: 
         :param layers: 
         :return: 
         """
 
-        if type == 'bulkload_change':
+        if provision_type == 'bulkload_change':
             row_count_value = partial_count
 
         try:
@@ -895,12 +893,15 @@ class BulkLoader(object):
             cursor = con.cursor()
             sql = ''
             for layer in layers:
-                if type == 'bulkload_full':
+                if provision_type == 'bulkload_full':
                     row_count_value = "(SELECT COUNT(*) from provisioning.{})".format(layer)
-                sql += """INSERT INTO public.provisioning_history(provisioning_type, layer, count_row, last_modified, duration)
-            VALUES('{}', '{}', {}, '{}','{}');""".format(type, layer, row_count_value,
-                                                         datetime.datetime.now(),
-                                                         duration)
+
+                sql += """INSERT INTO public.provisioning_history(provisioning_type, layer, count_row, last_modified, duration, status, messages)
+            VALUES('{}', '{}', {}, '{}','{}','{}','{}');""".format(self._provision_type, layer, row_count_value,
+                                                                   datetime.datetime.now(),
+                                                                   self._duration, self._provisioning_status_flag,
+                                                                   self._provisioning_status_message)
+
             cursor.execute(sql)
             self._logger.info('provisioning history table inserted in public schema')
 
@@ -928,18 +929,16 @@ if __name__ == "__main__":
     db_password = input("Enter the database password:")
     db_target_schema = input("Enter the name of the provisioning schema:")
 
-    bulkloader = BulkLoader(gdb_path, db_host, db_name, db_port, db_user, db_password, db_target_schema, layers_to_load)
+    bulkloader = BulkLoader(gdb_path, db_host, db_name, db_port, db_user, db_password, db_target_schema, layers_to_load,
+                            script_mode)
 
     try:
         if script_mode.lower() == 'c':
-            provision_history_typename = "bulkload_change"
             bulkloader.change_only_gdb_import()
         elif script_mode.lower() == 'f':
-            provision_history_typename = "bulkload_full"
             bulkloader.full_gdb_import()
         else:
             print("Invalid option detected, goodbye")
-        bulkloader.provisioning_history_log(provision_history_typename, provision_history_layers)
     except NameError:
         print('An error was encountered and the process has been terminated.')
         raise
