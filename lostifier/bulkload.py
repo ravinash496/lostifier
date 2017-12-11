@@ -24,8 +24,7 @@ import datetime
 
 
 class BulkLoader(object):
-    def __init__(self, gdb_path, host, database_name, port, user_name, password, target_schema, layers_to_load,
-                 script_mode):
+    def __init__(self, gdb_path, host, database_name, port, user_name, password, target_schema, layers_to_load):
         """
         Constructor
         
@@ -73,10 +72,7 @@ class BulkLoader(object):
         self._partial_count = 0
         self._provisioning_status_flag = 'success'
         self._provisioning_status_message = 'good'
-        if self._script_mode == 'c':
-            self._provision_type = 'bulkload_change'
-        else:
-            self._provision_type = 'bulkload_full'
+        self._provision_type = 'Bulkload'
 
         # Set up logging for GDAL/OGR
         gdal.PushErrorHandler(self._gdal_error_handler)
@@ -271,10 +267,10 @@ class BulkLoader(object):
         Starting Location for the Change Only Process
         
         """
+        self._provision_type = 'bulkload_change'
         start_time = datetime.datetime.now()
         ogrds = self._ogr_open_postgis()
         gdb = self._ogr_open_fgdb()
-        provision_history_typename = "bulkload_change"
 
         # Start Transaction
         ogrds.StartTransaction()
@@ -306,7 +302,7 @@ class BulkLoader(object):
 
         self._duration = (end_time - start_time)
 
-        self.provisioning_history_log(provision_history_typename, self._provision_history_layers)
+        self.provisioning_history_log(self._provision_type, self._provision_history_layers)
 
         self._logger.info('All changes have been processed.')
 
@@ -317,7 +313,7 @@ class BulkLoader(object):
         :return:
         """
         # Get the provisioning schema ready.
-
+        self._provision_type = 'bulkload_full'
         start_time = datetime.datetime.now()
 
         self._reset_provisioning_schema()
@@ -929,8 +925,7 @@ if __name__ == "__main__":
     db_password = input("Enter the database password:")
     db_target_schema = input("Enter the name of the provisioning schema:")
 
-    bulkloader = BulkLoader(gdb_path, db_host, db_name, db_port, db_user, db_password, db_target_schema, layers_to_load,
-                            script_mode)
+    bulkloader = BulkLoader(gdb_path, db_host, db_name, db_port, db_user, db_password, db_target_schema, layers_to_load)
 
     try:
         if script_mode.lower() == 'c':
