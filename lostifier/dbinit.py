@@ -105,13 +105,14 @@ class EcrfDbInitializer(object):
         self._logger.info('Schemas up.')
         provisioning_history = """CREATE TABLE public.provisioning_history
                         (
-                            provisioning_type character varying(75) COLLATE pg_catalog."default",
+                            ID uuid,
                             layer character varying(75) COLLATE pg_catalog."default",
-                            count_row numeric(1000,0),
-                            last_modified character varying(75),
-                            duration character varying(75),
-                            status character varying(75),
-                            messages character varying(150)
+                            load_type character varying(75) COLLATE pg_catalog."default",
+                            row_count numeric(1000,0),
+                            start_time timestamp with time zone,
+                            end_time timestamp with time zone,
+                            status character varying(75) COLLATE pg_catalog."default",
+                            messages character varying(150) COLLATE pg_catalog."default"
                         )"""
 
         self._execute_command(self._connection_string, provisioning_history)

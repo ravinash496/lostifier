@@ -13,6 +13,9 @@ C - Change only - Reads an Add and Delete table for each layer, and processes ea
 import logging
 import psycopg2 as psycopg2
 from osgeo import ogr, gdal
+import datetime
+import uuid
+import pytz
 from civvy.db.postgis.query import PgQueryExecutor
 from civvy.db.postgis.indexes import EmptyValueIndexTask
 from civvy.db.postgis.indexes import LowercaseValueIndexTask
@@ -20,7 +23,6 @@ from civvy.db.postgis.locating.indexes import CreateMetaphoneIndexTask
 from civvy.locating import CivicAddressSourceMapCollection
 from civvy.db.postgis.locating.points import PgPointsLocatingIndexer
 from civvy.db.postgis.locating.streets import PgStreetsLocatingIndexer
-import datetime
 
 
 class BulkLoader(object):
@@ -60,19 +62,12 @@ class BulkLoader(object):
         # Set up the base logging.
         self._logger = logging.getLogger('lostifier.bulkload.BulkLoader')
         self._logger.setLevel(logging.DEBUG)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(funcName)s()- %(lineno)s - %(message)s')
         consolehandler = logging.StreamHandler()
         consolehandler.setLevel(logging.DEBUG)
         consolehandler.setFormatter(formatter)
         self._logger.addHandler(consolehandler)
-        self._script_mode = script_mode.lower()
-
-        self._provision_history_layers = []
-        self._duration = 0
-        self._partial_count = 0
-        self._provisioning_status_flag = 'success'
-        self._provisioning_status_message = 'good'
-        self._provision_type = 'Bulkload'
+        self.provisioning_event_list = []
 
         # Set up logging for GDAL/OGR
         gdal.PushErrorHandler(self._gdal_error_handler)
@@ -106,9 +101,6 @@ class BulkLoader(object):
             self._logger.debug('Opening psycopg2 connection to {0} on {1}.'.format(self._database_name, self._host))
             con = psycopg2.connect(self._connection_string)
         except psycopg2.Error as ex:
-            self._provisioning_status_flag = 'fail'
-            self._provisioning_status_message = ex
-            self.provisioning_history_log(self._provision_type, self._provision_history_layers)
             self._logger.error(ex.pgerror)
             raise
 
@@ -127,9 +119,10 @@ class BulkLoader(object):
 
         if gdb is None:
             self._logger.error('Unable to open file geodatabase.')
-            self._provisioning_status_flag = False
-            self._provisioning_status_message = 'Unable to open file geodatabase.'
-            self.provisioning_history_log(self._provision_type, self._provision_history_layers)
+            now = datetime.datetime.now(tz=pytz.utc)
+            provisioning_event = ProvisioningEvent("no layers", 0, now, now, "bulkload", "fail", "Unable to open file geodatabase.")
+            self.provisioning_event_list.append(provisioning_event)
+            self._provisioning_history_log(self.provisioning_event_list)
             raise Exception
 
         self._logger.info('File geodatabase connection successful.')
@@ -146,9 +139,6 @@ class BulkLoader(object):
         ogrds = ogr.Open(ogr_connection_string, 1)
         if ogrds is None:
             self._logger.error('Unable to open PostGIS.')
-            self._provisioning_status_flag = False
-            self._provisioning_status_message = 'Unable to open PostGIS.'
-            self.provisioning_history_log(self._provision_type, self._provision_history_layers)
             raise Exception
 
         self._logger.info('Ogr connection to PostGIS successful.')
@@ -163,7 +153,6 @@ class BulkLoader(object):
         :param ogrds:
         :return:
         """
-
         itemcount = 0
         feature = gdblayer_del.GetNextFeature()
         while feature is not None:
@@ -179,8 +168,7 @@ class BulkLoader(object):
             feature = gdblayer_del.GetNextFeature()
 
         self._logger.info('{0} items were deleted from {1}'.format(itemcount, name))
-        global partial_count
-        partial_count = itemcount
+        return itemcount
 
     def _verify_results(self, result, srcunqid):
         """
@@ -236,8 +224,7 @@ class BulkLoader(object):
             feature = gdblayer_add.GetNextFeature()
 
         self._logger.info('{0} items were added into {1}'.format(itemcount, name))
-        global partial_count
-        partial_count = itemcount
+        return itemcount
 
     def _process_layer(self, name, gdb, ogrds):
         """
@@ -248,27 +235,34 @@ class BulkLoader(object):
         :param ogrds: The destination PostGIS database.
         :return:
         """
+        del_count = 0
+        add_count = 0
+
         # Get the layer_del from the file geodatabase.
         gdblayer_del = gdb.GetLayerByName(name + '_del')
 
         # If the layer was found, loop though the items in the layer
         if gdblayer_del is not None:
-            self._delete_item_from_gdb(gdblayer_del, name, ogrds)
+            del_count = self._delete_item_from_gdb(gdblayer_del, name, ogrds)
 
         # Get the layer_add from the file geodatabase.
         gdblayer_add = gdb.GetLayerByName(name + '_add')
 
         # If the layer was found, loop though the items in the layer
         if gdblayer_add is not None:
-            self._add_item_from_gdb(gdblayer_add, name, ogrds)
+            add_count = self._add_item_from_gdb(gdblayer_add, name, ogrds)
+
+        total = del_count + add_count
+
+        return total
 
     def change_only_gdb_import(self, flip_when_done=False):
         """
         Starting Location for the Change Only Process
         
         """
-        self._provision_type = 'bulkload_change'
-        start_time = datetime.datetime.now()
+        provision_type = 'bulkload_change'
+
         ogrds = self._ogr_open_postgis()
         gdb = self._ogr_open_fgdb()
 
@@ -277,10 +271,14 @@ class BulkLoader(object):
 
         # For each layer name in our list of layers to load . . .
         for name in self._layers_to_load:
-            self._provision_history_layers.append(name)
-            self._process_layer(name, gdb, ogrds)
+            start_time = datetime.datetime.now(tz=pytz.utc)
+            row_count = self._process_layer(name, gdb, ogrds)
+            end_time = datetime.datetime.now(tz=pytz.utc)
+            provisioning_event = ProvisioningEvent(name, row_count, start_time, end_time, provision_type)
+            self.provisioning_event_list.append(provisioning_event)
 
         for i in range(gdb.GetLayerCount()):
+            start_time = datetime.datetime.now(tz=pytz.utc)
             layer = gdb.GetLayerByIndex(i)
             layername = layer.GetName()
             layername = str(layername)
@@ -289,8 +287,11 @@ class BulkLoader(object):
                 # Trim off _add or _delete from the layer name and pass it to _process_layer()
                 trimedlayername = layername.strip('_add')
                 trimedlayername = trimedlayername.strip('_del')
-                self._provision_history_layers.append(trimedlayername)
-                self._process_layer(trimedlayername, gdb, ogrds)
+
+                row_count = self._process_layer(trimedlayername, gdb, ogrds)
+                end_time = datetime.datetime.now(tz=pytz.utc)
+                provisioning_event = ProvisioningEvent(trimedlayername, row_count, start_time, end_time, provision_type)
+                self.provisioning_event_list.append(provisioning_event)
 
         # Commit transaction
         ogrds.CommitTransaction()
@@ -298,11 +299,7 @@ class BulkLoader(object):
         if flip_when_done:
             self._flip_schemas()
 
-        end_time = datetime.datetime.now()
-
-        self._duration = (end_time - start_time)
-
-        self.provisioning_history_log(self._provision_type, self._provision_history_layers)
+        self._provisioning_history_log(self.provisioning_event_list)
 
         self._logger.info('All changes have been processed.')
 
@@ -313,9 +310,7 @@ class BulkLoader(object):
         :return:
         """
         # Get the provisioning schema ready.
-        self._provision_type = 'bulkload_full'
-        start_time = datetime.datetime.now()
-
+        provision_type = 'bulkload_full'
         self._reset_provisioning_schema()
 
         ogrds = self._ogr_open_postgis()
@@ -324,10 +319,10 @@ class BulkLoader(object):
         options = ['SCHEMA={0}'.format(self._target_schema), 'OVERWRITE=YES']
 
         processed_layers = []
-
         # For each layer name in our list of layers to load . . .
         self._logger.info('Processing standard layers . . .')
         for name in self._layers_to_load:
+            start_time = datetime.datetime.now(tz=pytz.utc)
             # Get the layer from the file geodatabase.
             layer = gdb.GetLayerByName(name)
 
@@ -335,23 +330,29 @@ class BulkLoader(object):
             if layer is not None:
                 layername = layer.GetName()
                 self._logger.info('Importing layer :: {0}'.format(layername))
-                self._provision_history_layers.append(layername)
                 tablename = ogrds.CopyLayer(layer, name, options).GetName()
                 processed_layers.append(tablename)
-
+                end_time = datetime.datetime.now(tz=pytz.utc)
+                row_count = "(SELECT COUNT(*) from {}.{})".format(self._target_schema, layername)
+                provisioning_event = ProvisioningEvent(layername, row_count, start_time, end_time, provision_type)
+                self.provisioning_event_list.append(provisioning_event)
         self._logger.info('Processing layers starting with ESB and ALOC . . .')
 
         for i in range(gdb.GetLayerCount()):
+            start_time = datetime.datetime.now(tz=pytz.utc)
             layer = gdb.GetLayerByIndex(i)
             layername = layer.GetName()
             layername = str(layername)
 
             if layername.upper().startswith("ESB") or layername.upper().startswith("ALOC"):
-                self._provision_history_layers.append(layername)
+                # self._provision_history_layers.append(layername)
                 self._logger.info('Importing layer :: {0}'.format(layername))
                 tablename = ogrds.CopyLayer(layer, layername, options).GetName()
                 processed_layers.append(tablename)
-
+                end_time = datetime.datetime.now(tz=pytz.utc)
+                row_count = "(SELECT COUNT(*) from {}.{})".format(self._target_schema, layername)
+                provisioning_event = ProvisioningEvent(layername, row_count, start_time, end_time, provision_type)
+                self.provisioning_event_list.append(provisioning_event)
         self._make_gcunqid_nullable(processed_layers)
         self._create_primary_key(processed_layers)
         self._create_sequence(processed_layers)
@@ -359,10 +360,8 @@ class BulkLoader(object):
         self._create_civvy_indexes()
         if flip_when_done:
             self._flip_schemas()
-        end_time = datetime.datetime.now()
 
-        self._duration = (end_time - start_time)
-        self.provisioning_history_log(self._provision_type, self._provision_history_layers)
+        self._provisioning_history_log(self.provisioning_event_list)
 
     def _flip_schemas(self):
         """
@@ -386,9 +385,10 @@ class BulkLoader(object):
                     cursor.execute(sqlstring)
             self._logger.info('Schemas flipped.')
         except psycopg2.Error as ex:
-            self._provisioning_status_flag = False
-            self._provisioning_status_message = ex
-            self.provisioning_history_log(self._provision_type, self._provision_history_layers)
+            now = datetime.datetime.now(tz=pytz.utc)
+            provisioning_event = ProvisioningEvent("no layers", 0, now, now, "bulkload", "fail", ex.pgerror)
+            self.provisioning_event_list.append(provisioning_event)
+            self._provisioning_history_log(self.provisioning_event_list)
             self._logger.error(ex.pgerror)
             raise
 
@@ -418,9 +418,10 @@ class BulkLoader(object):
             self._logger.info('Bulk load provisioning schema ready.')
 
         except psycopg2.Error as ex:
-            self._provisioning_status_flag = False
-            self._provisioning_status_message = ex
-            self.provisioning_history_log(self._provision_type, self._provision_history_layers)
+            now = datetime.datetime.now(tz=pytz.utc)
+            provisioning_event = ProvisioningEvent("no layers", 0, now, now, "bulkload", "fail", ex.pgerror)
+            self.provisioning_event_list.append(provisioning_event)
+            self._provisioning_history_log(self.provisioning_event_list)
             self._logger.error(ex.pgerror)
 
     def _make_gcunqid_nullable(self, processed_layers):
@@ -441,6 +442,10 @@ class BulkLoader(object):
                 self._logger.debug('NOT NULL removed from gcunqid in {0}'.format(processed_layer))
 
         except psycopg2.Error as ex:
+            now = datetime.datetime.now(tz=pytz.utc)
+            provisioning_event = ProvisioningEvent("no layers", 0, now, now, "bulkload", "fail", ex.pgerror)
+            self.provisioning_event_list.append(provisioning_event)
+            self._provisioning_history_log(self.provisioning_event_list)
             self._logger.error(ex.pgerror)
         finally:
             con.close()
@@ -468,6 +473,10 @@ class BulkLoader(object):
                 self._logger.debug('Primary key has been set to srcunqid for the table {0}'.format(processed_layer))
 
         except psycopg2.Error as ex:
+            now = datetime.datetime.now(tz=pytz.utc)
+            provisioning_event = ProvisioningEvent("no layers", 0, now, now, "bulkload", "fail", ex.pgerror)
+            self.provisioning_event_list.append(provisioning_event)
+            self._provisioning_history_log(self.provisioning_event_list)
             self._logger.error(ex.pgerror)
         finally:
             con.close()
@@ -495,6 +504,10 @@ class BulkLoader(object):
                 )
 
         except psycopg2.Error as ex:
+            now = datetime.datetime.now(tz=pytz.utc)
+            provisioning_event = ProvisioningEvent("no layers", 0, now, now, "bulkload", "fail", ex.pgerror)
+            self.provisioning_event_list.append(provisioning_event)
+            self._provisioning_history_log(self.provisioning_event_list)
             self._logger.error(ex.pgerror)
         finally:
             con.close()
@@ -514,6 +527,10 @@ class BulkLoader(object):
             self._logger.info("Index's have been applied.")
 
         except psycopg2.Error as ex:
+            now = datetime.datetime.now(tz=pytz.utc)
+            provisioning_event = ProvisioningEvent("no layers", 0, now, now, "bulkload", "fail", ex.pgerror)
+            self.provisioning_event_list.append(provisioning_event)
+            self._provisioning_history_log(self.provisioning_event_list)
             self._logger.error(ex.pgerror)
         finally:
             con.close()
@@ -872,40 +889,52 @@ class BulkLoader(object):
                                                              code=report.result.code.value,
                                                              detail=report.result.detail))
 
-    def provisioning_history_log(self, provision_type, layers):
+    def _provisioning_history_log(self, event_list):
         """
         logs into provisioning_history_table in public schema
-        :param provision_type: 
-        :param layers: 
+        :param event_list: list of events
         :return: 
         """
 
-        if provision_type == 'bulkload_change':
-            row_count_value = partial_count
+        sql = ''
+        unique_ID = uuid.uuid4()
+        for event in event_list:
+            sql += """INSERT INTO public.provisioning_history(id, layer, load_type, row_count, start_time, end_time, status, messages)
+            VALUES('{}','{}', '{}', {}, '{}','{}','{}','{}');""".format(unique_ID, event.layer, event.load_type,
+                                                                        event.row_count, event.start_time,
+                                                                        event.end_time, event.status, event.message)
 
         try:
-            con = self._connect_postgres_db()
-            con.autocommit = True
-            cursor = con.cursor()
-            sql = ''
-            for layer in layers:
-                if provision_type == 'bulkload_full':
-                    row_count_value = "(SELECT COUNT(*) from provisioning.{})".format(layer)
-
-                sql += """INSERT INTO public.provisioning_history(provisioning_type, layer, count_row, last_modified, duration, status, messages)
-            VALUES('{}', '{}', {}, '{}','{}','{}','{}');""".format(self._provision_type, layer, row_count_value,
-                                                                   datetime.datetime.now(),
-                                                                   self._duration, self._provisioning_status_flag,
-                                                                   self._provisioning_status_message)
-
-            cursor.execute(sql)
-            self._logger.info('provisioning history table inserted in public schema')
-
+            with self._connect_postgres_db() as con:
+                con.autocommit = True
+                with con.cursor() as cursor:
+                    cursor.execute(sql)
+            self._logger.info('Inserted into provisioning history table in public schema.')
         except psycopg2.Error as ex:
             self._logger.error(ex.pgerror)
+            raise
 
-        finally:
-            con.close()
+
+class ProvisioningEvent():
+
+    def __init__(self, layer, row_count, start_time, end_time, load_type="bulkload", status="success", message="Happy"):
+        """
+        Constructor
+        :param layer: layer name
+        :param load_type: type of load bulkload_full/bulkload_change
+        :param row_count: number of records modified
+        :param start_time: start_time of each layer processed
+        :param end_time:  end_time of each layer processed
+        :param status: status of the event
+        :param message: what was the reason
+        """
+        self.layer = layer
+        self.load_type = load_type
+        self.row_count = row_count
+        self.start_time = start_time
+        self.end_time = end_time
+        self.status = status
+        self.message = message
 
 
 if __name__ == "__main__":
