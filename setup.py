@@ -39,6 +39,7 @@ setup(
     'appdirs>=1.4.3',
     'Babel>=2.4.0',
     'cement>=2.10.2',
+    'civvy>=0.0.18',
     'colorama>=0.3.9',
     'docutils>=0.13.1',
     'GDAL==2.1.3',

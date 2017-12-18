@@ -80,7 +80,11 @@ class EcrfDbInitializer(object):
 
         :return:
         """
-        self._logger.info('Creating the srgis database . . .')
+
+        self._logger.info('Removing {0} database if it already exists . . .'.format(self._database_name))
+        self._execute_command(self._root_connection_string, 'DROP DATABASE IF EXISTS {0};'.format(self._database_name))
+
+        self._logger.info('Creating the {0} database . . .'.format(self._database_name))
         self._execute_command(self._root_connection_string, 'CREATE DATABASE {0};'.format(self._database_name))
 
         self._logger.info('Installing postgis extension . . .')
@@ -99,7 +103,20 @@ class EcrfDbInitializer(object):
             """.format(self._database_name)
         self._execute_command(self._connection_string, schemas_command)
         self._logger.info('Schemas up.')
+        provisioning_history = """CREATE TABLE public.provisioning_history
+                        (
+                            ID uuid,
+                            layer character varying(75) COLLATE pg_catalog."default",
+                            load_type character varying(75) COLLATE pg_catalog."default",
+                            row_count numeric(1000,0),
+                            start_time timestamp with time zone,
+                            end_time timestamp with time zone,
+                            status character varying(75) COLLATE pg_catalog."default",
+                            messages character varying(150) COLLATE pg_catalog."default"
+                        )"""
 
+        self._execute_command(self._connection_string, provisioning_history)
+        self._logger.info('provisioning history table created')
         self._logger.info('{0} database up and ready for action!'.format(self._database_name))
 
 
