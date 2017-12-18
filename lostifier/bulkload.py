@@ -319,6 +319,7 @@ class BulkLoader(object):
         options = ['SCHEMA={0}'.format(self._target_schema), 'OVERWRITE=YES']
 
         processed_layers = []
+        provisioning_event_dict = {}
         # For each layer name in our list of layers to load . . .
         self._logger.info('Processing standard layers . . .')
         for name in self._layers_to_load:
@@ -333,9 +334,11 @@ class BulkLoader(object):
                 tablename = ogrds.CopyLayer(layer, name, options).GetName()
                 processed_layers.append(tablename)
                 end_time = datetime.datetime.now(tz=pytz.utc)
-                row_count = "(SELECT COUNT(*) from {}.{})".format(self._target_schema, layername)
-                provisioning_event = ProvisioningEvent(layername, row_count, start_time, end_time, provision_type)
-                self.provisioning_event_list.append(provisioning_event)
+
+                sql = "SELECT '{}', COUNT(*) from {}.{} UNION".format(layername, self._target_schema, layername)
+
+                provisioning_event_dict[layername] = [layername, sql, start_time, end_time, provision_type]
+
         self._logger.info('Processing layers starting with ESB and ALOC . . .')
 
         for i in range(gdb.GetLayerCount()):
@@ -345,19 +348,30 @@ class BulkLoader(object):
             layername = str(layername)
 
             if layername.upper().startswith("ESB") or layername.upper().startswith("ALOC"):
-                # self._provision_history_layers.append(layername)
                 self._logger.info('Importing layer :: {0}'.format(layername))
                 tablename = ogrds.CopyLayer(layer, layername, options).GetName()
                 processed_layers.append(tablename)
                 end_time = datetime.datetime.now(tz=pytz.utc)
-                row_count = "(SELECT COUNT(*) from {}.{})".format(self._target_schema, layername)
-                provisioning_event = ProvisioningEvent(layername, row_count, start_time, end_time, provision_type)
-                self.provisioning_event_list.append(provisioning_event)
+
+                sql = "SELECT '{}', COUNT(*) from {}.{} UNION".format(layername, self._target_schema, layername)
+                provisioning_event_dict[layername] = [layername, sql, start_time, end_time, provision_type]
+
+        sql_events_dict = {event: provisioning_event_dict[event][1] for event in provisioning_event_dict}
+        sql_events_list = list(sql_events_dict.values())
+        sql_events_list[-1] = sql_events_list[-1].replace(" UNION", ";")
+        sql_events = " ".join(sql_events_list)
+        row_count_res = dict(self._rowcount(sql_events))
+        for event in row_count_res:
+            provisioning_event_dict[event][1] = row_count_res[event]
+            provisioning_event = ProvisioningEvent(*provisioning_event_dict[event])
+            self.provisioning_event_list.append(provisioning_event)
+
         self._make_gcunqid_nullable(processed_layers)
         self._create_primary_key(processed_layers)
         self._create_sequence(processed_layers)
         self._create_index()
         self._create_civvy_indexes()
+
         if flip_when_done:
             self._flip_schemas()
 
@@ -914,10 +928,33 @@ class BulkLoader(object):
             self._logger.error(ex.pgerror)
             raise
 
+    def _rowcount(self, sql):
+        """
+        count of rows
+        :return: 
+        """
+        rowcount = 0
+        try:
+            with self._connect_postgres_db() as con:
+                con.autocommit = True
+                with con.cursor() as cursor:
+                    cursor.execute(sql)
+                    rowcount = cursor.fetchall()
 
-class ProvisioningEvent():
+        except psycopg2.Error as ex:
+            now = datetime.datetime.now(tz=pytz.utc)
+            provisioning_event = ProvisioningEvent("no layers", 0, now, now, "bulkload", "fail", ex.pgerror)
+            self.provisioning_event_list.append(provisioning_event)
+            self._provisioning_history_log(self.provisioning_event_list)
+            self._logger.error(ex.pgerror)
+            raise
 
-    def __init__(self, layer, row_count, start_time, end_time, load_type="bulkload", status="success", message="Happy"):
+        return rowcount
+
+
+class ProvisioningEvent(object):
+
+    def __init__(self, layer, row_count, start_time, end_time, load_type="bulkload", status="success", message=""):
         """
         Constructor
         :param layer: layer name
