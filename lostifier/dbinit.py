@@ -74,6 +74,29 @@ class EcrfDbInitializer(object):
             self._logger.error(ex.pgerror)
             raise
 
+    def _db_exists(self) -> bool:
+        """
+        Check to see if the database exists.
+
+        :return: True if the database exists, false otherwise.
+        :rtype: bool
+        """
+        exists = False
+        try:
+            self._logger.info('Checking for existence of {} database . . .'.format(self._database_name))
+            with psycopg2.connect(self._root_connection_string) as con:
+                con.autocommit = True
+                with con.cursor() as cursor:
+                    cursor.execute("SELECT COUNT(*) != 0 FROM pg_catalog.pg_database WHERE datname = '{0}'".format(self._database_name))
+                    exists_row = cursor.fetchone()
+                    exists = exists_row[0]
+            self._logger.info('Database already exists.' if exists else 'Database does not exist.')
+        except psycopg2.Error as ex:
+            self._logger.error(ex.pgerror)
+            raise
+
+        return exists
+
     def initialize(self):
         """
         Do all the things to set up the database.
@@ -81,29 +104,27 @@ class EcrfDbInitializer(object):
         :return:
         """
 
-        self._logger.info('Removing {0} database if it already exists . . .'.format(self._database_name))
-        self._execute_command(self._root_connection_string, 'DROP DATABASE IF EXISTS {0};'.format(self._database_name))
-
-        self._logger.info('Creating the {0} database . . .'.format(self._database_name))
-        self._execute_command(self._root_connection_string, 'CREATE DATABASE {0};'.format(self._database_name))
+        if not self._db_exists():
+            self._logger.info('Creating the {0} database . . .'.format(self._database_name))
+            self._execute_command(self._root_connection_string, 'CREATE DATABASE {0};'.format(self._database_name))
+            self._logger.info('{0} database created.'.format(self._database_name))
 
         self._logger.info('Installing postgis extension . . .')
-        self._execute_command(self._connection_string, 'CREATE EXTENSION postgis;')
+        self._execute_command(self._connection_string, 'CREATE EXTENSION IF NOT EXISTS postgis;')
 
         self._logger.info('Installing fuzzystrmatch extension . . .')
-        self._execute_command(self._connection_string, 'CREATE EXTENSION fuzzystrmatch;')
-
-        self._logger.info('{0} database created.'.format(self._database_name))
+        self._execute_command(self._connection_string, 'CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;')
 
         self._logger.info('Setting up schemas . . .')
         schemas_command = """
-            CREATE SCHEMA active;
-            CREATE SCHEMA provisioning;
+            CREATE SCHEMA IF NOT EXISTS active;
+            CREATE SCHEMA IF NOT EXISTS provisioning;
             ALTER DATABASE {0} SET SEARCH_PATH TO public, active;
             """.format(self._database_name)
         self._execute_command(self._connection_string, schemas_command)
         self._logger.info('Schemas up.')
-        provisioning_history = """CREATE TABLE public.provisioning_history
+
+        provisioning_history = """CREATE TABLE IF NOT EXISTS public.provisioning_history
                         (
                             ID uuid,
                             layer character varying(75) COLLATE pg_catalog."default",
