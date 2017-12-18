@@ -83,7 +83,7 @@ class EcrfDbInitializer(object):
         """
         exists = False
         try:
-            self._logger.info('Checking for existence of {} database . . .'.format(self._database_name))
+            self._logger.info('Checking for existence of {0} database . . .'.format(self._database_name))
             with psycopg2.connect(self._root_connection_string) as con:
                 con.autocommit = True
                 with con.cursor() as cursor:
