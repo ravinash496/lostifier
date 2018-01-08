@@ -859,27 +859,28 @@ class BulkLoader(object):
                                          database=self._database_name,
                                          user=self._user_name,
                                          password=self._password)
-
+        # Civvy indexes below take care of this for us.
+        # so there isn't a need to duplicate the effort here.
         # empty value index . . .
-        self._logger.info('Adding civvy empty value index . . .')
-        index_task = EmptyValueIndexTask(table_name='ssap',
-                                         field_name='strname',
-                                         schema=self._target_schema)
-        index_task.execute(query_executor)
-
-        # lowercase value index . . .
-        self._logger.info('Adding civvy lowercase value index . . .')
-        index_task = LowercaseValueIndexTask(table_name='ssap',
-                                             field_name='strname',
-                                             schema=self._target_schema)
-        index_task.execute(query_executor)
-
-        # metahpone index . . .
-        self._logger.info('Adding civvy metaphone index . . .')
-        index_task = CreateMetaphoneIndexTask(table_name='ssap',
-                                              field_name='strname',
-                                              max_output_len=4,
-                                              schema=self._target_schema)
+        # self._logger.info('Adding civvy empty value index . . .')
+        # index_task = EmptyValueIndexTask(table_name='ssap',
+        #                                  field_name='strname',
+        #                                  schema=self._target_schema)
+        # index_task.execute(query_executor)
+        #
+        # # lowercase value index . . .
+        # self._logger.info('Adding civvy lowercase value index . . .')
+        # index_task = LowercaseValueIndexTask(table_name='ssap',
+        #                                      field_name='strname',
+        #                                      schema=self._target_schema)
+        # index_task.execute(query_executor)
+        #
+        # # metahpone index . . .
+        # self._logger.info('Adding civvy metaphone index . . .')
+        # index_task = CreateMetaphoneIndexTask(table_name='ssap',
+        #                                       field_name='strname',
+        #                                       max_output_len=4,
+        #                                       schema=self._target_schema)
         index_task.execute(query_executor)
 
         self._logger.debug('Dumping civvy config:')
