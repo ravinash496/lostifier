@@ -881,7 +881,7 @@ class BulkLoader(object):
         #                                       field_name='strname',
         #                                       max_output_len=4,
         #                                       schema=self._target_schema)
-        index_task.execute(query_executor)
+        # index_task.execute(query_executor)
 
         self._logger.debug('Dumping civvy config:')
         self._logger.debug(jsons)
